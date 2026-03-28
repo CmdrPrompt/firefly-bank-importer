@@ -12,6 +12,8 @@ from typing import Any, TypedDict, cast
 
 import requests
 
+from firefly_bank_importer.bank_formats import resolve_bank_format
+from firefly_bank_importer.bank_formats.base import ColumnMapping
 from firefly_bank_importer.config import load_api_token, load_firefly_url
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -184,6 +186,13 @@ def find_account_id(folder_name: str, account_map: dict[str, int]) -> int | None
 MONTHLY_FILE_RE = re.compile(r"^\d{4}-\d{2}\.csv$")
 
 
+def _resolve_column_mapping(headers: list[str]) -> tuple[str, ColumnMapping] | None:
+    bank_format = resolve_bank_format(headers)
+    if bank_format is None:
+        return None
+    return bank_format.name, bank_format.build_column_mapping(headers)
+
+
 def split_file_in_place(input_file: Path) -> None:
     months: defaultdict[str, list[list[str]]] = defaultdict(list)
 
@@ -191,17 +200,15 @@ def split_file_in_place(input_file: Path) -> None:
         reader = csv.reader(f, delimiter=";")
         headers = next(reader)
 
-        csv_format = detect_csv_format(headers)
-        if csv_format == "seb":
-            datum_idx = headers.index("Bokföringsdatum")
-        elif csv_format == "ica":
-            datum_idx = headers.index("Datum")
-        else:
+        resolved = _resolve_column_mapping(headers)
+        if resolved is None:
             logging.warning(f"  Okänt format i {input_file.name}, hoppar över split.")
             return
+        _, mapping = resolved
 
-        belopp_idx = headers.index("Belopp")
-        saldo_idx = headers.index("Saldo") if "Saldo" in headers else None
+        datum_idx = mapping.date_idx
+        belopp_idx = mapping.amount_idx
+        saldo_idx = mapping.balance_idx
 
         for row in reader:
             for idx in (belopp_idx, saldo_idx):
@@ -263,15 +270,10 @@ def parse_amount(raw_amount: str) -> float:
 
 
 def detect_csv_format(headers: list[str]) -> str:
-    header_set = set(headers)
-
-    if {"Bokföringsdatum", "Text", "Belopp"}.issubset(header_set):
-        return "seb"
-
-    if {"Datum", "Text", "Typ", "Belopp"}.issubset(header_set):
-        return "ica"
-
-    return "unknown"
+    bank_format = resolve_bank_format(headers)
+    if bank_format is None:
+        return "unknown"
+    return bank_format.name
 
 
 def _build_transaction_payload(date: str, description: str, amount: float, account_id: int) -> dict[str, str]:
@@ -347,19 +349,13 @@ def create_transaction(
 
 
 def _get_csv_indices(csv_format: str, headers: list[str]) -> tuple[int, int, int, int | None]:
-    if csv_format == "seb":
-        return (
-            headers.index("Bokföringsdatum"),
-            headers.index("Text"),
-            headers.index("Belopp"),
-            None,
-        )
-    return (
-        headers.index("Datum"),
-        headers.index("Text"),
-        headers.index("Belopp"),
-        headers.index("Typ"),
-    )
+    resolved = _resolve_column_mapping(headers)
+    if resolved is None:
+        raise ValueError("Unsupported CSV format")
+    resolved_format, mapping = resolved
+    if resolved_format != csv_format:
+        raise ValueError(f"CSV headers do not match requested format: {csv_format}")
+    return mapping.date_idx, mapping.description_idx, mapping.amount_idx, mapping.transaction_type_idx
 
 
 def _collect_pending_rows(
@@ -434,12 +430,16 @@ def process_csv(
         reader = csv.reader(f, delimiter=";")
         headers = next(reader)
 
-        csv_format = detect_csv_format(headers)
-        if csv_format == "unknown":
+        resolved = _resolve_column_mapping(headers)
+        if resolved is None:
             logging.error(f"Okant CSV-format i {csv_path.name}. Hittade headers: {headers}")
             return
+        csv_format, mapping = resolved
 
-        datum_idx, text_idx, belopp_idx, type_idx = _get_csv_indices(csv_format, headers)
+        datum_idx = mapping.date_idx
+        text_idx = mapping.description_idx
+        belopp_idx = mapping.amount_idx
+        type_idx = mapping.transaction_type_idx
         logging.info(f"  Format: {csv_format.upper()}")
         if latest_date is not None:
             logging.info(f"  Senaste i Firefly: {latest_date} (hoppar over <= detta datum)")

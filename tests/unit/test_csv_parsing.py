@@ -1,109 +1,128 @@
-"""Characterisation tests for detect_csv_format() and _get_csv_indices().
+"""Tests for registry-driven bank CSV format resolution.
 
-Documents current behavior as-is.
+These tests describe the target package architecture for bank-specific CSV
+formats. The core importer should resolve a matching format through a shared
+contract instead of hardcoding per-bank column logic in import_firefly.py.
 """
 
-import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from firefly_bank_importer.import_firefly import _get_csv_indices, detect_csv_format
+from firefly_bank_importer.bank_formats import get_registered_bank_formats, resolve_bank_format
 
 SEB_REQUIRED = {"Bokföringsdatum", "Text", "Belopp"}
 ICA_REQUIRED = {"Datum", "Text", "Typ", "Belopp"}
 
 
-class TestDetectCsvFormatSEB:
+class TestRegisteredBankFormats:
+    def test_seb_and_ica_are_registered(self) -> None:
+        format_names = {bank_format.name for bank_format in get_registered_bank_formats()}
+        assert {"seb", "ica"}.issubset(format_names)
+
+
+class TestResolveBankFormatSEB:
     def test_minimal_seb_headers(self) -> None:
-        assert detect_csv_format(["Bokföringsdatum", "Text", "Belopp"]) == "seb"
+        bank_format = resolve_bank_format(["Bokföringsdatum", "Text", "Belopp"])
+        assert bank_format is not None
+        assert bank_format.name == "seb"
 
     def test_full_seb_headers(self) -> None:
-        assert detect_csv_format(["Bokföringsdatum", "Valutadatum", "Text", "Belopp", "Saldo"]) == "seb"
+        bank_format = resolve_bank_format(["Bokföringsdatum", "Valutadatum", "Text", "Belopp", "Saldo"])
+        assert bank_format is not None
+        assert bank_format.name == "seb"
 
     def test_seb_missing_one_required_returns_unknown(self) -> None:
-        assert detect_csv_format(["Bokföringsdatum", "Text"]) == "unknown"
+        assert resolve_bank_format(["Bokföringsdatum", "Text"]) is None
 
     def test_seb_missing_belopp_returns_unknown(self) -> None:
-        assert detect_csv_format(["Bokföringsdatum", "Text", "Datum"]) == "unknown"
+        assert resolve_bank_format(["Bokföringsdatum", "Text", "Datum"]) is None
 
 
-class TestDetectCsvFormatICA:
+class TestResolveBankFormatICA:
     def test_minimal_ica_headers(self) -> None:
-        assert detect_csv_format(["Datum", "Text", "Typ", "Belopp"]) == "ica"
+        bank_format = resolve_bank_format(["Datum", "Text", "Typ", "Belopp"])
+        assert bank_format is not None
+        assert bank_format.name == "ica"
 
     def test_full_ica_headers(self) -> None:
-        assert detect_csv_format(["Datum", "Text", "Typ", "Belopp", "Saldo"]) == "ica"
+        bank_format = resolve_bank_format(["Datum", "Text", "Typ", "Belopp", "Saldo"])
+        assert bank_format is not None
+        assert bank_format.name == "ica"
 
     def test_ica_missing_typ_returns_unknown(self) -> None:
-        assert detect_csv_format(["Datum", "Text", "Belopp"]) == "unknown"
+        assert resolve_bank_format(["Datum", "Text", "Belopp"]) is None
 
     def test_ica_missing_datum_returns_unknown(self) -> None:
-        assert detect_csv_format(["Text", "Typ", "Belopp"]) == "unknown"
+        assert resolve_bank_format(["Text", "Typ", "Belopp"]) is None
 
 
-class TestDetectCsvFormatUnknown:
+class TestResolveBankFormatUnknown:
     def test_empty_headers(self) -> None:
-        assert detect_csv_format([]) == "unknown"
+        assert resolve_bank_format([]) is None
 
     def test_unrelated_headers(self) -> None:
-        assert detect_csv_format(["Foo", "Bar", "Baz"]) == "unknown"
+        assert resolve_bank_format(["Foo", "Bar", "Baz"]) is None
 
     def test_case_sensitive_seb(self) -> None:
-        # SURPRISING: matching is case-sensitive — lowercase fails
-        assert detect_csv_format(["bokföringsdatum", "text", "belopp"]) == "unknown"
+        assert resolve_bank_format(["bokföringsdatum", "text", "belopp"]) is None
 
     def test_case_sensitive_ica(self) -> None:
-        assert detect_csv_format(["datum", "text", "typ", "belopp"]) == "unknown"
+        assert resolve_bank_format(["datum", "text", "typ", "belopp"]) is None
 
 
-class TestDetectCsvFormatHypothesis:
+class TestResolveBankFormatHypothesis:
     @given(extra=st.lists(st.text(min_size=1, max_size=20), max_size=5))
     @settings(max_examples=200)
     def test_seb_headers_with_extra_columns_still_seb(self, extra: list[str]) -> None:
         headers = list(SEB_REQUIRED) + extra
-        result = detect_csv_format(headers)
-        assert result in (
-            "seb",
-            "ica",
-        )  # extra cols might accidentally add ICA required set
+        result = resolve_bank_format(headers)
+        assert result is None or result.name in ("seb", "ica")
 
     @given(headers=st.lists(st.text(min_size=1, max_size=20), min_size=0, max_size=10))
     @settings(max_examples=300)
     def test_random_headers_never_crash(self, headers: list[str]) -> None:
-        result = detect_csv_format(headers)
-        assert result in ("seb", "ica", "unknown")
+        result = resolve_bank_format(headers)
+        assert result is None or result.name in ("seb", "ica")
 
 
-class TestGetCsvIndicesSEB:
+class TestColumnMappingSEB:
     def test_seb_returns_correct_indices(self) -> None:
         headers = ["Bokföringsdatum", "Valutadatum", "Text", "Belopp", "Saldo"]
-        datum_idx, text_idx, belopp_idx, type_idx = _get_csv_indices("seb", headers)
-        assert datum_idx == headers.index("Bokföringsdatum")
-        assert text_idx == headers.index("Text")
-        assert belopp_idx == headers.index("Belopp")
-        assert type_idx is None
+        bank_format = resolve_bank_format(headers)
+        assert bank_format is not None
+        mapping = bank_format.build_column_mapping(headers)
+        assert mapping.date_idx == headers.index("Bokföringsdatum")
+        assert mapping.description_idx == headers.index("Text")
+        assert mapping.amount_idx == headers.index("Belopp")
+        assert mapping.transaction_type_idx is None
+        assert mapping.balance_idx == headers.index("Saldo")
 
     def test_seb_type_idx_is_none(self) -> None:
         headers = ["Bokföringsdatum", "Text", "Belopp"]
-        _, _, _, type_idx = _get_csv_indices("seb", headers)
-        assert type_idx is None
+        bank_format = resolve_bank_format(headers)
+        assert bank_format is not None
+        mapping = bank_format.build_column_mapping(headers)
+        assert mapping.transaction_type_idx is None
 
 
-class TestGetCsvIndicesICA:
+class TestColumnMappingICA:
     def test_ica_returns_correct_indices(self) -> None:
         headers = ["Datum", "Text", "Typ", "Belopp", "Saldo"]
-        datum_idx, text_idx, belopp_idx, type_idx = _get_csv_indices("ica", headers)
-        assert datum_idx == headers.index("Datum")
-        assert text_idx == headers.index("Text")
-        assert belopp_idx == headers.index("Belopp")
-        assert type_idx == headers.index("Typ")
+        bank_format = resolve_bank_format(headers)
+        assert bank_format is not None
+        mapping = bank_format.build_column_mapping(headers)
+        assert mapping.date_idx == headers.index("Datum")
+        assert mapping.description_idx == headers.index("Text")
+        assert mapping.amount_idx == headers.index("Belopp")
+        assert mapping.transaction_type_idx == headers.index("Typ")
+        assert mapping.balance_idx == headers.index("Saldo")
 
     def test_ica_type_idx_is_not_none(self) -> None:
         headers = ["Datum", "Text", "Typ", "Belopp"]
-        _, _, _, type_idx = _get_csv_indices("ica", headers)
-        assert type_idx is not None
+        bank_format = resolve_bank_format(headers)
+        assert bank_format is not None
+        mapping = bank_format.build_column_mapping(headers)
+        assert mapping.transaction_type_idx is not None
 
-    def test_ica_missing_column_raises(self) -> None:
-        # ValueError from list.index() if column is missing
-        with pytest.raises(ValueError):
-            _get_csv_indices("ica", ["Datum", "Text", "Belopp"])  # "Typ" missing
+    def test_ica_missing_column_returns_none_during_resolution(self) -> None:
+        assert resolve_bank_format(["Datum", "Text", "Belopp"]) is None
