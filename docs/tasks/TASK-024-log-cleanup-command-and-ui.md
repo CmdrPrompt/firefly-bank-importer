@@ -13,7 +13,7 @@ Implement UC-23 and FR-37: clear import logs (all or older than N days) with exp
 
 ## Completion
 **Date:** YYYY-MM-DD
-**Summary:** 
+**Summary:**
 **Files changed:**
 - `path/to/file` -- created / modified
 **Branch:** `git checkout -b task/024-log-cleanup-command-and-ui`

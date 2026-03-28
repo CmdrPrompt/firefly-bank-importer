@@ -13,7 +13,7 @@ Implement UC-22 in the web UI: upload CSV files through the interface and place 
 
 ## Completion
 **Date:** YYYY-MM-DD
-**Summary:** 
+**Summary:**
 **Files changed:**
 - `path/to/file` -- created / modified
 **Branch:** `git checkout -b task/020-web-ui-file-upload`

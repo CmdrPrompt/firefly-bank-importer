@@ -13,7 +13,7 @@ Implement UC-18 in the web UI: provide dry-run preview for selected folders and 
 
 ## Completion
 **Date:** YYYY-MM-DD
-**Summary:** 
+**Summary:**
 **Files changed:**
 - `path/to/file` -- created / modified
 **Branch:** `git checkout -b task/018-web-ui-dry-run-preview`

@@ -13,7 +13,7 @@ Implement UC-15 in the web UI: configure Firefly URL and token from settings pag
 
 ## Completion
 **Date:** YYYY-MM-DD
-**Summary:** 
+**Summary:**
 **Files changed:**
 - `path/to/file` -- created / modified
 **Branch:** `git checkout -b task/021-web-ui-settings-firefly-config`

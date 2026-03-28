@@ -13,7 +13,7 @@ Implement UC-19 in the web UI: run live import and stream progress/log output du
 
 ## Completion
 **Date:** YYYY-MM-DD
-**Summary:** 
+**Summary:**
 **Files changed:**
 - `path/to/file` -- created / modified
 **Branch:** `git checkout -b task/019-web-ui-live-import-progress`

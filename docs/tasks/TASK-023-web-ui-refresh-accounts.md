@@ -13,7 +13,7 @@ Implement UC-21 in the web UI: trigger account refresh from Firefly and show ref
 
 ## Completion
 **Date:** YYYY-MM-DD
-**Summary:** 
+**Summary:**
 **Files changed:**
 - `path/to/file` -- created / modified
 **Branch:** `git checkout -b task/023-web-ui-refresh-accounts`

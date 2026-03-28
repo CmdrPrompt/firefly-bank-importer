@@ -13,7 +13,7 @@ Implement UC-20 in the web UI: show prior import runs and detailed logs for audi
 
 ## Completion
 **Date:** YYYY-MM-DD
-**Summary:** 
+**Summary:**
 **Files changed:**
 - `path/to/file` -- created / modified
 **Branch:** `git checkout -b task/022-web-ui-import-history-logs`
