@@ -1,7 +1,7 @@
 # TASK-018 Web UI dry-run preview
 
 ## Status
-todo
+in-progress
 
 ## Description
 Implement UC-18 in the web UI: provide dry-run preview for selected folders and account mappings before live import.
