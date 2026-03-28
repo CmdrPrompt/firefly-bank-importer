@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 import csv
+import io
 import json
 import threading
 from dataclasses import dataclass
 from datetime import date, datetime
 from html import escape
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Annotated, Any, TypedDict
 from uuid import uuid4
 
 import requests
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse
 
 from firefly_bank_importer.bank_formats import resolve_bank_format
@@ -72,6 +73,17 @@ class LiveImportJob(TypedDict):
     summary: LiveImportSummary
     events: list[LiveImportEvent]
     error: str | None
+
+
+class UploadResult(TypedDict):
+    filename: str
+    status: str
+    reason: str | None
+    detected_format: str | None
+
+
+UploadFolderForm = Annotated[str, Form(...)]
+UploadFilesForm = Annotated[list[UploadFile], File(...)]
 
 
 @dataclass
@@ -417,6 +429,163 @@ def _render_live_import_page(folders: list[str]) -> str:
     )
 
 
+def _handle_csv_upload(import_base: Path, folder: str, files: list[UploadFile]) -> dict[str, Any]:
+    folder_path = import_base / folder
+    if not folder_path.exists() or not folder_path.is_dir():
+        return {
+            "folder": folder,
+            "results": [],
+            "saved_count": 0,
+            "rejected_count": len(files),
+            "error": "Vald importmapp finns inte.",
+        }
+
+    results: list[UploadResult] = []
+    saved_count = 0
+    rejected_count = 0
+
+    for upload in files:
+        safe_name = Path(upload.filename or "").name
+        if not safe_name:
+            results.append(
+                {
+                    "filename": "(saknar namn)",
+                    "status": "rejected",
+                    "reason": "Filen saknar namn.",
+                    "detected_format": None,
+                }
+            )
+            rejected_count += 1
+            continue
+
+        if not safe_name.lower().endswith(".csv"):
+            results.append(
+                {
+                    "filename": safe_name,
+                    "status": "rejected",
+                    "reason": "Endast .csv-filer stöds.",
+                    "detected_format": None,
+                }
+            )
+            rejected_count += 1
+            continue
+
+        content = upload.file.read()
+        try:
+            decoded = content.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            results.append(
+                {
+                    "filename": safe_name,
+                    "status": "rejected",
+                    "reason": "Filen kunde inte avkodas som UTF-8.",
+                    "detected_format": None,
+                }
+            )
+            rejected_count += 1
+            continue
+
+        reader = csv.reader(io.StringIO(decoded), delimiter=";")
+        headers = next(reader, None)
+        if headers is None:
+            results.append(
+                {
+                    "filename": safe_name,
+                    "status": "rejected",
+                    "reason": "Filen är tom.",
+                    "detected_format": None,
+                }
+            )
+            rejected_count += 1
+            continue
+
+        bank_format = resolve_bank_format(headers)
+        if bank_format is None:
+            results.append(
+                {
+                    "filename": safe_name,
+                    "status": "rejected",
+                    "reason": "CSV-header matchar inget stött format.",
+                    "detected_format": None,
+                }
+            )
+            rejected_count += 1
+            continue
+
+        target_path = folder_path / safe_name
+        if target_path.exists():
+            results.append(
+                {
+                    "filename": safe_name,
+                    "status": "rejected",
+                    "reason": "Fil med samma namn finns redan i målmappen.",
+                    "detected_format": bank_format.name,
+                }
+            )
+            rejected_count += 1
+            continue
+
+        target_path.write_bytes(content)
+        results.append(
+            {
+                "filename": safe_name,
+                "status": "saved",
+                "reason": None,
+                "detected_format": bank_format.name,
+            }
+        )
+        saved_count += 1
+
+    return {
+        "folder": folder,
+        "results": results,
+        "saved_count": saved_count,
+        "rejected_count": rejected_count,
+    }
+
+
+def _render_upload_form(previews: list[FolderPreview], message: str | None = None) -> str:
+    options = "".join(f"<option value='{escape(preview.name)}'>{escape(preview.name)}</option>" for preview in previews)
+    return (
+        "<h1>Ladda upp CSV-filer</h1>"
+        + (f"<p>{escape(message)}</p>" if message else "")
+        + "<form method='post' action='/upload' enctype='multipart/form-data'>"
+        + "<p><label>Målmapp: <select name='folder'>"
+        + options
+        + "</select></label></p>"
+        + "<p><input type='file' name='files' accept='.csv' multiple></p>"
+        + "<p><button type='submit'>Ladda upp</button></p>"
+        + "</form>"
+    )
+
+
+def _render_upload_results(result: dict[str, Any]) -> str:
+    rows = "".join(
+        "".join(
+            [
+                "<tr>",
+                f"<td>{escape(str(item.get('filename', '-')))}</td>",
+                f"<td>{escape(str(item.get('status', '-')))}</td>",
+                f"<td>{escape(str(item.get('detected_format') or '-'))}</td>",
+                f"<td>{escape(str(item.get('reason') or '-'))}</td>",
+                "</tr>",
+            ]
+        )
+        for item in result.get("results", [])
+    )
+    error_html = f"<p style='color:red;'>{escape(str(result['error']))}</p>" if "error" in result else ""
+    return (
+        "<h1>Upload-resultat</h1>"
+        + error_html
+        + f"<p>Sparade filer: {result.get('saved_count', 0)}</p>"
+        + f"<p>Avvisade filer: {result.get('rejected_count', 0)}</p>"
+        + "<table border='1' cellpadding='6' cellspacing='0'>"
+        + "<thead><tr><th>Fil</th><th>Status</th><th>Format</th><th>Orsak</th></tr></thead>"
+        + f"<tbody>{rows}</tbody>"
+        + "</table>"
+    )
+
+
 def list_import_folders(base_folder: Path) -> list[FolderPreview]:
     folders = sorted([folder for folder in base_folder.iterdir() if folder.is_dir()])
     previews: list[FolderPreview] = []
@@ -658,6 +827,29 @@ def create_app(base_folder: Path | None = None) -> FastAPI:
             "<h1>Välj importmappar</h1>"
             f"<p>Basmapp: {escape(str(import_base))}</p>"
             f"{_render_folder_table(previews)}"
+            "<p><a href='/upload'>Ladda upp CSV-filer</a></p>"
+            "</body></html>"
+        )
+
+    @app.get("/upload", response_class=HTMLResponse)
+    def upload_page() -> str:
+        previews = list_import_folders(import_base)
+        return (
+            "<html><head><meta charset='utf-8'><title>CSV-upload</title></head><body>"
+            f"{_render_upload_form(previews)}"
+            "<p><a href='/'>Tillbaka</a></p>"
+            "</body></html>"
+        )
+
+    @app.post("/upload", response_class=HTMLResponse)
+    async def upload_page_submit(folder: UploadFolderForm, files: UploadFilesForm) -> str:
+        result = _handle_csv_upload(import_base, folder, files)
+        previews = list_import_folders(import_base)
+        return (
+            "<html><head><meta charset='utf-8'><title>CSV-upload resultat</title></head><body>"
+            f"{_render_upload_results(result)}"
+            f"{_render_upload_form(previews, message='Du kan ladda upp fler filer direkt.')}"
+            "<p><a href='/'>Tillbaka</a></p>"
             "</body></html>"
         )
 
@@ -808,6 +1000,10 @@ def create_app(base_folder: Path | None = None) -> FastAPI:
             "best_match": best_match_id,
             "candidates": candidates,
         }
+
+    @app.post("/api/upload-csv")
+    async def api_upload_csv(folder: UploadFolderForm, files: UploadFilesForm) -> dict[str, Any]:
+        return _handle_csv_upload(import_base, folder, files)
 
     @app.get("/api/dry-run-preview")
     def api_dry_run_preview(request: Request) -> dict[str, Any]:
