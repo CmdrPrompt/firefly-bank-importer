@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- FastAPI-based web UI for import folder selection, including HTML and JSON endpoints for listing folders, CSV counts, detected formats, and date ranges.
+- Interactive account-matching step in the web UI with candidate lookup from the Firefly account cache and validation that blocks unresolved folders.
+- Dry-run preview endpoints and page showing per-folder and total candidate transactions, duplicate skips, date ranges, warnings, and blocking errors before live import.
+- Live-import job execution in the web UI with asynchronous start/status APIs, polling-based progress view, per-job event log, current folder/file context, and completion totals.
+- CSV upload page and multipart API endpoint in the web UI for placing files in import folders with per-file validation and user-visible saved/rejected feedback.
+- Additional characterization tests for web UI upload, settings, and live-import error branches.
+
+### Changed
+- Web UI coverage increased from 73% to 90%, restoring `make test` to passing with 87% total project coverage.
+
 ## [0.1.2] - 2026-03-28
 
 ### Added
