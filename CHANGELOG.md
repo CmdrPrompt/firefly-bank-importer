@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-03-28
+
+### Added
+- Characterisation test suite covering date parsing, duplicate detection, CSV parsing,
+  amount parsing, account matching, transaction payload building, log result handling,
+  CLI argument parsing, account cache loading, CSV splitting, `process_csv`,
+  `process_folder`, `build_account_map`, `save_account_cache`, `create_import_folders`,
+  `auto_split_folder`, and `create_transaction` (220+ tests in total).
+- `make stage`, `make stage-task`, and `make commit-task` Makefile targets to automate
+  the task-driven commit workflow.
+
+### Changed
+- Minimum test coverage threshold raised to 80% (currently 85%).
+- pre-commit ruff hook updated to v0.15.8 (matching local tooling) and switched to
+  `--check` mode to prevent stash conflicts during commits.
+- mypy configuration extended with module overrides for `pytest`, `hypothesis`, and
+  `requests` stubs.
+
 ## [0.1.1] - 2026-03-27
 
 ### Added
