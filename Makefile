@@ -20,7 +20,7 @@ help:
 	@echo "    make branch-task -- Create/switch task branch from task file: make branch-task f=TASK-001"
 	@echo "    make stage-task  -- Auto-fix and stage files listed in task file: make stage-task f=TASK-001"
 	@echo "    make commit-task -- Commit using message from task file: make commit-task f=TASK-001"
-	@echo "    make pr-task     -- Open GitHub PR using task title and body: make pr-task f=TASK-001"
+	@echo "    make pr-task     -- Switch to task branch and open GitHub PR: make pr-task f=TASK-001"
 	@echo "    make test        -- Run pytest with coverage"
 	@echo "    make clean       -- Remove venv and cache"
 	@echo ""
@@ -115,6 +115,27 @@ pr-task:
 	@[ -n "$(f)" ] || (echo "Usage: make pr-task f=<task-id-or-filename>"; exit 1)
 	@TASK_FILE=$$(find $(TASKS_DIR) -name "$(f)*.md" | head -1); \
 	[ -n "$$TASK_FILE" ] || (echo "No task file found matching '$(f)' in $(TASKS_DIR)"; exit 1); \
+	BRANCH_CMD=$$(grep '\*\*Branch:\*\*' "$$TASK_FILE" | sed 's/.*`\(git checkout[^`]*\)`.*/\1/' | head -1); \
+	if [ -n "$$BRANCH_CMD" ]; then \
+		echo "Running: $$BRANCH_CMD"; \
+		if ! eval "$$BRANCH_CMD"; then \
+			ALT_CMD=$$(echo "$$BRANCH_CMD" | sed 's/^git checkout -b /git checkout /'); \
+			if [ "$$ALT_CMD" != "$$BRANCH_CMD" ]; then \
+				echo "Branch may already exist. Running: $$ALT_CMD"; \
+				eval "$$ALT_CMD"; \
+			else \
+				exit 1; \
+			fi; \
+		fi; \
+	else \
+		TASK_BASE=$$(basename "$$TASK_FILE" .md); \
+		TARGET_BRANCH=$$(echo "$$TASK_BASE" | sed 's/^TASK-//' | tr '[:upper:]' '[:lower:]' | sed 's#^#task/#'); \
+		CURRENT_BRANCH=$$(git branch --show-current); \
+		if [ "$$CURRENT_BRANCH" != "$$TARGET_BRANCH" ]; then \
+			echo "Switching to inferred task branch: $$TARGET_BRANCH"; \
+			git checkout "$$TARGET_BRANCH" || git checkout -b "$$TARGET_BRANCH"; \
+		fi; \
+	fi; \
 	TITLE=$$(head -1 "$$TASK_FILE" | sed 's/^# //'); \
 	BODY=$$(awk '/^## Description/{found=1} /^## Completion/{found=0} found{print}' "$$TASK_FILE"); \
 	[ -n "$$TITLE" ] || (echo "Could not extract title from $$TASK_FILE"; exit 1); \
