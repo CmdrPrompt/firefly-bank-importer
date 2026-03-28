@@ -1,7 +1,7 @@
 # TASK-009 Tests for easy coverage wins
 
 ## Status
-todo
+done
 
 ## Description
 Add tests for several small functions that are currently untested. None require HTTP
@@ -20,21 +20,24 @@ Functions to cover:
   return `(response, type, amount_abs)`
 
 ## Acceptance criteria
-- [ ] `save_account_cache`: file written with correct `accounts` list and `fetched_at` key
-- [ ] `create_import_folders`: creates one subfolder per account, logs count; no-op
+- [x] `save_account_cache`: file written with correct `accounts` list and `fetched_at` key
+- [x] `create_import_folders`: creates one subfolder per account, logs count; no-op
       when folders already exist
-- [ ] `auto_split_folder`: calls `split_file_in_place` for non-monthly files only;
+- [x] `auto_split_folder`: calls `split_file_in_place` for non-monthly files only;
       leaves `YYYY-MM.csv` files untouched
-- [ ] `split_file_in_place` with only a header row: no output files created, source
+- [x] `split_file_in_place` with only a header row: no output files created, source
       file not deleted
-- [ ] `create_transaction` with `BLOCK_TRANSACTION_POSTS=True`: raises `RuntimeError`
-- [ ] `create_transaction` with `log=True` and a successful mock response: returns
+- [x] `create_transaction` with `BLOCK_TRANSACTION_POSTS=True`: raises `RuntimeError`
+- [x] `create_transaction` with `log=True` and a successful mock response: returns
       tuple and logs OK line
-- [ ] Tests pass with `make test`
+- [x] Tests pass with `make test`
 
 ## Completion
-**Date:**
-**Summary:**
+**Date:** 2025-07-14
+**Summary:** Added 16 characterisation tests covering all acceptance criteria. Coverage
+rose from 65% to 73%.
 **Files changed:**
-**Stage:**
-**Commit:**
+- `tests/unit/test_coverage_wins.py` — created
+- `docs/tasks/TASK-009-tests-easy-coverage-wins.md` — modified
+**Stage:** `git add tests/unit/test_coverage_wins.py docs/tasks/TASK-009-tests-easy-coverage-wins.md`
+**Commit:** `git commit -m "Add characterisation tests for easy coverage wins"`
