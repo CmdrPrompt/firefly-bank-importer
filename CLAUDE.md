@@ -38,16 +38,35 @@ Tasks are tracked as individual files in `docs/tasks/`. Each file represents one
 
 **File naming:** `TASK-001-short-description.md`
 
+**Branch policy:** Each task must be executed on its own dedicated branch. Do not
+commit task-start changes on `main`.
+
+**Standard task start workflow:**
+
+1. Create/update the task file in `docs/tasks/`.
+2. Create/switch to the dedicated task branch immediately.
+3. Set task `Status` to `in-progress` on that task branch.
+4. Commit both task metadata updates and implementation work on the task branch.
+
+Use `make branch-task f=<TASK-ID>` to create/switch branch from task metadata.
+
+**Branch naming:** `task/<NNN>-short-description`
+
 **Task file template:**
 
 ```markdown
-# TASK-001 Short description
+# TASK-<NNN> Short description
 
 ## Status
 todo | in-progress | done
 
 ## Description
 What needs to be done and why.
+
+## Branch
+**Branch name:** `task/<NNN>-short-description`
+**Switch/create:** `git checkout -b task/<NNN>-short-description`
+**Make target:** `make branch-task f=<TASK-ID>`
 
 ## Acceptance criteria
 - [ ] Criterion 1
@@ -58,13 +77,18 @@ What needs to be done and why.
 **Summary:** What was done, any decisions made, and what was left out and why.
 **Files changed:**
 - `path/to/file` — created / modified
+**Branch:** `git checkout -b task/<NNN>-short-description`
 **Stage:** `git add path/to/file1 path/to/file2`
 **Commit:** `git commit -m "Short imperative summary of what was done"`
 ```
 
-When starting a task, update `Status` to `in-progress`. When done, update `Status` to
+When starting a task, run `make branch-task f=<TASK-ID>` before implementation and
+then update `Status` to `in-progress` on that branch. When done, update `Status` to
 `done` and fill in the `Completion` section with date, a brief summary, and a list of
 all files that were created or modified before committing.
+
+If task-related work is discovered on `main`, create/switch to the task branch
+immediately and continue there.
 
 New tasks can be created by the user, by Claude Code, or by another LLM. Claude Code
 should check `docs/tasks/` for open tasks relevant to the current context before starting work.
