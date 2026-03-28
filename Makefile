@@ -1,4 +1,4 @@
-.PHONY: all help setup install lint fix stage test clean
+.PHONY: all help setup install lint fix stage task-stage test clean
 
 all: help
 
@@ -14,8 +14,9 @@ help:
 	@echo "  Daily use:"
 	@echo "    make lint     -- Run ruff, mypy, pymarkdown and radon (cognitive complexity)"
 	@echo "    make fix      -- Auto-fix ruff and pymarkdown issues"
-	@echo "    make stage    -- Auto-fix and re-stage all staged changes (run before git commit)"
-	@echo "    make test     -- Run pytest with coverage"
+	@echo "    make stage       -- Auto-fix and re-stage all staged changes (run before git commit)"
+	@echo "    make task-stage  -- Auto-fix and stage files from task file: make task-stage f=docs/tasks/TASK-001-...md"
+	@echo "    make test        -- Run pytest with coverage"
 	@echo "    make clean    -- Remove venv and cache"
 	@echo ""
 
@@ -50,6 +51,18 @@ stage:
 	uv run ruff format .; \
 	uv run pymarkdown --config .pymarkdown fix $$(find . -name "*.md" -not -path "./.venv/*"); \
 	[ -n "$$STAGED" ] && echo "$$STAGED" | xargs git add -- || true; \
+	git update-index -q --refresh
+
+## Stage files listed in a task file: make task-stage f=docs/tasks/TASK-001-...md
+task-stage:
+	@[ -n "$(f)" ] || (echo "Usage: make task-stage f=<task-file>"; exit 1)
+	@CMD=$$(grep '^\*\*Stage:\*\*' "$(f)" | sed 's/\*\*Stage:\*\* `//;s/`$$//'); \
+	[ -n "$$CMD" ] || (echo "No **Stage:** line found in $(f)"; exit 1); \
+	uv run ruff check --fix .; \
+	uv run ruff format .; \
+	uv run pymarkdown --config .pymarkdown fix $$(find . -name "*.md" -not -path "./.venv/*"); \
+	echo "Running: $$CMD"; \
+	eval "$$CMD"; \
 	git update-index -q --refresh
 
 ## Run tests with coverage
