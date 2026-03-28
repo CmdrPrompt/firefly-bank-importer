@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import csv
 import json
+import threading
 from dataclasses import dataclass
 from datetime import date, datetime
 from html import escape
 from pathlib import Path
 from typing import Any, TypedDict
+from uuid import uuid4
 
 import requests
 from fastapi import FastAPI, Request
@@ -15,6 +17,7 @@ from fastapi.responses import HTMLResponse
 from firefly_bank_importer.bank_formats import resolve_bank_format
 from firefly_bank_importer.config import CONFIG_FILE, SECRETS_FILE, TOKEN_FILE
 from firefly_bank_importer.import_firefly import (
+    create_transaction,
     find_account_id,
     get_latest_transaction_date,
     load_account_cache,
@@ -47,6 +50,28 @@ class DryRunSummary(TypedDict):
     folders: list[FolderDryRunSummary]
     totals: dict[str, int]
     can_continue: bool
+
+
+class LiveImportSummary(TypedDict):
+    imported: int
+    skipped: int
+    failed: int
+
+
+class LiveImportEvent(TypedDict):
+    timestamp: str
+    level: str
+    message: str
+
+
+class LiveImportJob(TypedDict):
+    job_id: str
+    state: str
+    current_folder: str | None
+    current_file: str | None
+    summary: LiveImportSummary
+    events: list[LiveImportEvent]
+    error: str | None
 
 
 @dataclass
@@ -340,6 +365,58 @@ def _render_dry_run_preview(summary: DryRunSummary) -> str:
     )
 
 
+def _render_live_import_page(folders: list[str]) -> str:
+    folders_json = json.dumps(folders, ensure_ascii=False)
+    return (
+        "<html><head><meta charset='utf-8'><title>Live import progress</title></head><body>"
+        "<h1>Live import progress</h1>"
+        "<p>Startar importjobb och uppdaterar status automatiskt.</p>"
+        "<p id='job-state'>Jobbstatus: väntar...</p>"
+        "<p id='job-summary'>Importerade: 0 | Hoppade över: 0 | Fel: 0</p>"
+        "<h2>Logg</h2>"
+        "<div id='job-log' style='max-height:320px;overflow:auto;border:1px solid #ddd;padding:8px;'></div>"
+        "<script>"
+        f"const selectedFolders = {folders_json};"
+        "let activeJobId = null;"
+        "async function startJob() {"
+        "  const res = await fetch('/api/live-import/start', {"
+        "    method: 'POST',"
+        "    headers: {'Content-Type': 'application/json'},"
+        "    body: JSON.stringify({folders: selectedFolders})"
+        "  });"
+        "  const data = await res.json();"
+        "  activeJobId = data.job_id;"
+        "  if (!activeJobId) {"
+        "    document.getElementById('job-state').textContent = 'Jobbstatus: kunde inte starta';"
+        "    return;"
+        "  }"
+        "  setTimeout(refreshStatus, 200);"
+        "}"
+        "async function refreshStatus() {"
+        "  if (!activeJobId) return;"
+        "  const res = await fetch(`/api/live-import/status?job_id=${encodeURIComponent(activeJobId)}`);"
+        "  const data = await res.json();"
+        "  if (data.error) {"
+        "    document.getElementById('job-state').textContent = `Jobbstatus: ${data.error}`;"
+        "    return;"
+        "  }"
+        "  document.getElementById('job-state').textContent = `Jobbstatus: ${data.state}`;"
+        "  document.getElementById('job-summary').textContent ="
+        "    `Importerade: ${data.summary.imported} | "
+        "Hoppade över: ${data.summary.skipped} | "
+        "Fel: ${data.summary.failed}`;"
+        "  const logHtml = data.events.map(e => `${e.timestamp} [${e.level}] ${e.message}`).join('<br>');"
+        "  document.getElementById('job-log').innerHTML = logHtml || '-';"
+        "  if (data.state === 'completed' || data.state === 'failed') return;"
+        "  setTimeout(refreshStatus, 700);"
+        "}"
+        "startJob();"
+        "</script>"
+        "<p><a href='/'>Tillbaka</a></p>"
+        "</body></html>"
+    )
+
+
 def list_import_folders(base_folder: Path) -> list[FolderPreview]:
     folders = sorted([folder for folder in base_folder.iterdir() if folder.is_dir()])
     previews: list[FolderPreview] = []
@@ -402,6 +479,176 @@ def _render_folder_table(previews: list[FolderPreview]) -> str:
 def create_app(base_folder: Path | None = None) -> FastAPI:
     app = FastAPI(title="Firefly Import Web UI", version="0.1.0")
     import_base = base_folder or _DEFAULT_IMPORT_BASE
+    jobs: dict[str, LiveImportJob] = {}
+    jobs_lock = threading.Lock()
+
+    def add_event(job: LiveImportJob, level: str, message: str) -> None:
+        job["events"].append(
+            {
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "level": level,
+                "message": message,
+            }
+        )
+
+    def run_live_import_job(job_id: str, folders: list[str]) -> None:
+        with jobs_lock:
+            job = jobs.get(job_id)
+            if job is None:
+                return
+            job["state"] = "running"
+            add_event(job, "info", f"Startar live import för {len(folders)} mappar.")
+
+        try:
+            firefly_url, api_token, settings_warnings = _load_web_firefly_settings()
+            with jobs_lock:
+                job = jobs[job_id]
+                for warning in settings_warnings:
+                    add_event(job, "warning", warning)
+
+            if firefly_url is None or api_token is None:
+                with jobs_lock:
+                    job = jobs[job_id]
+                    job["state"] = "failed"
+                    job["error"] = "Firefly-inställningar saknas."
+                    add_event(job, "error", "Avbryter: saknar URL eller token.")
+                return
+
+            accounts = load_account_cache()
+            if not accounts:
+                with jobs_lock:
+                    job = jobs[job_id]
+                    job["state"] = "failed"
+                    job["error"] = "Kontocache saknas."
+                    add_event(job, "error", "Avbryter: kontocache saknas.")
+                return
+
+            account_map = {a["name"]: a["id"] for a in accounts}
+            session = requests.Session()
+            session.headers.update({"Authorization": f"Bearer {api_token}", "Accept": "application/json"})
+
+            for folder_name in folders:
+                with jobs_lock:
+                    job = jobs[job_id]
+                    job["current_folder"] = folder_name
+                    add_event(job, "info", f"Bearbetar mapp: {folder_name}")
+
+                folder_path = import_base / folder_name
+                account_id = find_account_id(folder_name, account_map)
+                if account_id is None:
+                    with jobs_lock:
+                        job = jobs[job_id]
+                        job["summary"]["failed"] += 1
+                        add_event(job, "error", f"Ingen kontomatchning för mapp {folder_name}.")
+                    continue
+
+                if not folder_path.exists() or not folder_path.is_dir():
+                    with jobs_lock:
+                        job = jobs[job_id]
+                        job["summary"]["failed"] += 1
+                        add_event(job, "error", f"Mappen {folder_name} finns inte.")
+                    continue
+
+                latest_date = get_latest_transaction_date(session, account_id, firefly_url)
+
+                for csv_path in sorted(folder_path.glob("*.csv")):
+                    with jobs_lock:
+                        job = jobs[job_id]
+                        job["current_file"] = csv_path.name
+                        add_event(job, "info", f"Bearbetar fil: {csv_path.name}")
+
+                    with csv_path.open(encoding="utf-8-sig") as handle:
+                        reader = csv.reader(handle, delimiter=";")
+                        headers = next(reader, None)
+                        if headers is None:
+                            with jobs_lock:
+                                job = jobs[job_id]
+                                add_event(job, "warning", f"{csv_path.name}: tom fil.")
+                            continue
+
+                        bank_format = resolve_bank_format(headers)
+                        if bank_format is None:
+                            with jobs_lock:
+                                job = jobs[job_id]
+                                job["summary"]["failed"] += 1
+                                add_event(job, "error", f"{csv_path.name}: okänt CSV-format.")
+                            continue
+
+                        mapping = bank_format.build_column_mapping(headers)
+                        for row in reader:
+                            if (
+                                mapping.date_idx >= len(row)
+                                or mapping.description_idx >= len(row)
+                                or mapping.amount_idx >= len(row)
+                            ):
+                                with jobs_lock:
+                                    job = jobs[job_id]
+                                    job["summary"]["failed"] += 1
+                                    add_event(job, "error", f"{csv_path.name}: rad saknar obligatoriska kolumner.")
+                                continue
+
+                            try:
+                                row_date = datetime.strptime(row[mapping.date_idx], "%Y-%m-%d").date()
+                            except ValueError:
+                                with jobs_lock:
+                                    job = jobs[job_id]
+                                    job["summary"]["failed"] += 1
+                                    add_event(job, "error", f"{csv_path.name}: ogiltigt datum {row[mapping.date_idx]}.")
+                                continue
+
+                            if latest_date is not None and row_date <= latest_date:
+                                with jobs_lock:
+                                    job = jobs[job_id]
+                                    job["summary"]["skipped"] += 1
+                                continue
+
+                            description = row[mapping.description_idx].strip()
+                            if mapping.transaction_type_idx is not None and mapping.transaction_type_idx < len(row):
+                                description = f"{description} [{row[mapping.transaction_type_idx].strip()}]"
+
+                            try:
+                                result = create_transaction(
+                                    session,
+                                    row[mapping.date_idx],
+                                    description,
+                                    row[mapping.amount_idx],
+                                    account_id,
+                                    firefly_url,
+                                    dry_run=False,
+                                    log=False,
+                                )
+                            except (RuntimeError, ValueError, requests.RequestException) as exc:
+                                with jobs_lock:
+                                    job = jobs[job_id]
+                                    job["summary"]["failed"] += 1
+                                    add_event(job, "error", f"Transaktionsfel: {exc}")
+                                continue
+
+                            if result is None:
+                                with jobs_lock:
+                                    job = jobs[job_id]
+                                    job["summary"]["failed"] += 1
+                                continue
+
+                            response, _transaction_type, _amount_abs = result
+                            with jobs_lock:
+                                job = jobs[job_id]
+                                if response.status_code in (200, 201):
+                                    job["summary"]["imported"] += 1
+                                else:
+                                    job["summary"]["failed"] += 1
+                                    add_event(job, "error", f"API-fel: {response.status_code} {response.text[:80]}")
+
+            with jobs_lock:
+                job = jobs[job_id]
+                job["state"] = "completed"
+                add_event(job, "info", "Live import slutförd.")
+        except Exception as exc:  # pragma: no cover
+            with jobs_lock:
+                job = jobs[job_id]
+                job["state"] = "failed"
+                job["error"] = str(exc)
+                add_event(job, "error", f"Jobbet avbröts: {exc}")
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
@@ -576,12 +823,64 @@ def create_app(base_folder: Path | None = None) -> FastAPI:
     def preview_page(request: Request) -> str:
         folders = request.query_params.getlist("folder")
         summary = _build_dry_run_summary(folders, import_base)
+        hidden_inputs = "".join(f"<input type='hidden' name='folder' value='{escape(folder)}'>" for folder in folders)
+        live_button = (
+            "<p><button type='submit'>Starta live import</button></p>"
+            if summary["can_continue"]
+            else "<p><button type='submit' disabled>Starta live import</button></p>"
+        )
         return (
             "<html><head><meta charset='utf-8'><title>Dry-run preview</title></head><body>"
             f"{_render_dry_run_preview(summary)}"
+            "<form method='get' action='/live-import'>"
+            f"{hidden_inputs}"
+            f"{live_button}"
+            "</form>"
             "<p><a href='/'>Tillbaka</a></p>"
             "</body></html>"
         )
+
+    @app.get("/live-import", response_class=HTMLResponse)
+    def live_import_page(request: Request) -> str:
+        folders = request.query_params.getlist("folder")
+        return _render_live_import_page(folders)
+
+    @app.post("/api/live-import/start")
+    async def api_live_import_start(request: Request) -> dict[str, Any]:
+        body = await request.json()
+        raw_folders = body.get("folders", []) if isinstance(body, dict) else []
+        folders = [str(item) for item in raw_folders if isinstance(item, str)]
+        job_id = str(uuid4())
+        job: LiveImportJob = {
+            "job_id": job_id,
+            "state": "queued",
+            "current_folder": None,
+            "current_file": None,
+            "summary": {"imported": 0, "skipped": 0, "failed": 0},
+            "events": [],
+            "error": None,
+        }
+        with jobs_lock:
+            jobs[job_id] = job
+
+        threading.Thread(target=run_live_import_job, args=(job_id, folders), daemon=True).start()
+        return {"job_id": job_id, "state": "queued"}
+
+    @app.get("/api/live-import/status")
+    def api_live_import_status(job_id: str) -> dict[str, Any]:
+        with jobs_lock:
+            job = jobs.get(job_id)
+            if job is None:
+                return {"error": "Okänt jobb-id."}
+            return {
+                "job_id": job["job_id"],
+                "state": job["state"],
+                "current_folder": job["current_folder"],
+                "current_file": job["current_file"],
+                "summary": job["summary"],
+                "events": job["events"],
+                "error": job["error"],
+            }
 
     return app
 
