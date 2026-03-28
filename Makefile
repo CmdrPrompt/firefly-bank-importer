@@ -43,6 +43,7 @@ lint:
 	uv run ruff check .
 	uv run ruff format --check .
 	uv run mypy src/
+	uv run bandit -r src/ -c pyproject.toml
 	uv run pymarkdown --config .pymarkdown scan $(shell find . -name "*.md" -not -path "./.venv/*")
 	uv run radon cc src/ --min C --show-complexity
 
