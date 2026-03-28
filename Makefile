@@ -1,4 +1,4 @@
-.PHONY: all help setup install lint fix stage stage-task commit-task test clean
+.PHONY: all help setup install lint fix stage stage-task commit-task pr-task test clean
 
 TASKS_DIR := docs/tasks
 
@@ -14,11 +14,12 @@ help:
 	@echo "    make install  -- Create venv, install dependencies and activate pre-commit"
 	@echo ""
 	@echo "  Daily use:"
-	@echo "    make lint        -- Run ruff, mypy, pymarkdown and radon (cognitive complexity)"
+	@echo "    make lint        -- Run ruff, mypy, bandit, pymarkdown and radon (cognitive complexity)"
 	@echo "    make fix         -- Auto-fix ruff and pymarkdown issues"
 	@echo "    make stage       -- Auto-fix and re-stage all staged changes (run before git commit)"
 	@echo "    make stage-task  -- Auto-fix and stage files listed in task file: make stage-task f=TASK-001"
 	@echo "    make commit-task -- Commit using message from task file: make commit-task f=TASK-001"
+	@echo "    make pr-task     -- Open GitHub PR using task title and body: make pr-task f=TASK-001"
 	@echo "    make test        -- Run pytest with coverage"
 	@echo "    make clean       -- Remove venv and cache"
 	@echo ""
@@ -26,6 +27,7 @@ help:
 	@echo "    make stage-task f=TASK-001   # fix + stage files listed in task"
 	@echo "    git diff --staged            # optional: review before committing"
 	@echo "    make commit-task f=TASK-001  # commit with message from task file"
+	@echo "    make pr-task f=TASK-001      # open PR on GitHub with task title + body"
 	@echo ""
 
 ## Install uv if missing (run once per machine)
@@ -85,6 +87,17 @@ commit-task:
 	[ -n "$$MSG" ] || (echo "No **Commit:** line found in $$TASK_FILE"; exit 1); \
 	echo "Running: git commit -m \"$$MSG\""; \
 	git commit -m "$$MSG"
+
+## Open a GitHub PR using task title and description: make pr-task f=TASK-001
+pr-task:
+	@[ -n "$(f)" ] || (echo "Usage: make pr-task f=<task-id-or-filename>"; exit 1)
+	@TASK_FILE=$$(find $(TASKS_DIR) -name "$(f)*.md" | head -1); \
+	[ -n "$$TASK_FILE" ] || (echo "No task file found matching '$(f)' in $(TASKS_DIR)"; exit 1); \
+	TITLE=$$(head -1 "$$TASK_FILE" | sed 's/^# //'); \
+	BODY=$$(awk '/^## Description/{found=1} /^## Completion/{found=0} found{print}' "$$TASK_FILE"); \
+	[ -n "$$TITLE" ] || (echo "Could not extract title from $$TASK_FILE"; exit 1); \
+	echo "Creating PR: $$TITLE"; \
+	gh pr create --title "$$TITLE" --body "$$BODY" --base main
 
 ## Run tests with coverage
 test:
