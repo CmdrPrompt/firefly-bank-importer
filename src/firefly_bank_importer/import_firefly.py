@@ -12,9 +12,9 @@ from typing import Any, TypedDict, cast
 
 import requests
 
-FIREFLY_URL = "http://truenas.local:30105"
+from firefly_bank_importer.config import load_api_token, load_firefly_url
+
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-TOKEN_FILE = _PROJECT_ROOT / "token"
 ACCOUNT_CACHE_FILE = _PROJECT_ROOT / "accounts_cache.json"
 
 MAX_WORKERS = 5
@@ -45,16 +45,12 @@ def setup_logging() -> str:
     return log_file
 
 
-def get_token() -> str:
-    return Path(TOKEN_FILE).read_text().strip()
-
-
-def fetch_accounts_from_firefly(session: requests.Session) -> list[Account]:
+def fetch_accounts_from_firefly(session: requests.Session, firefly_url: str) -> list[Account]:
     accounts: list[Account] = []
     page = 1
     while True:
         response = session.get(
-            f"{FIREFLY_URL}/api/v1/accounts",
+            f"{firefly_url}/api/v1/accounts",
             params={"type": "asset", "page": str(page)},
         )
         if response.status_code != 200:
@@ -113,7 +109,11 @@ def load_account_cache() -> list[Account] | None:
         return None
 
 
-def build_account_map(session: requests.Session, refresh: bool = False) -> tuple[dict[str, int], list[Account]]:
+def build_account_map(
+    session: requests.Session,
+    firefly_url: str,
+    refresh: bool = False,
+) -> tuple[dict[str, int], list[Account]]:
     accounts: list[Account] | None = None
     if not refresh:
         accounts = load_account_cache()
@@ -121,7 +121,7 @@ def build_account_map(session: requests.Session, refresh: bool = False) -> tuple
     if accounts is None:
         logging.info("Hämtar konton från Firefly...")
         try:
-            accounts = fetch_accounts_from_firefly(session)
+            accounts = fetch_accounts_from_firefly(session, firefly_url)
             save_account_cache(accounts)
         except RuntimeError as e:
             logging.error(str(e))
@@ -232,9 +232,9 @@ def auto_split_folder(folder: Path) -> None:
             split_file_in_place(f)
 
 
-def get_latest_transaction_date(session: requests.Session, account_id: int) -> date | None:
+def get_latest_transaction_date(session: requests.Session, account_id: int, firefly_url: str) -> date | None:
     response = session.get(
-        f"{FIREFLY_URL}/api/v1/accounts/{account_id}/transactions",
+        f"{firefly_url}/api/v1/accounts/{account_id}/transactions",
         params={"limit": 1, "page": 1},
     )
 
@@ -316,6 +316,7 @@ def create_transaction(
     description: str,
     amount: str | float,
     account_id: int,
+    firefly_url: str = "",
     dry_run: bool = False,
     log: bool = True,
 ) -> tuple[requests.Response, str, float] | None:
@@ -337,7 +338,7 @@ def create_transaction(
     if BLOCK_TRANSACTION_POSTS:
         raise RuntimeError("POST av transaktion blockerad eftersom dry-run-skydd är aktivt.")
 
-    response = session.post(f"{FIREFLY_URL}/api/v1/transactions", json={"transactions": [payload]})
+    response = session.post(f"{firefly_url}/api/v1/transactions", json={"transactions": [payload]})
 
     if log:
         _log_tx_result(response, transaction_type, amount_abs, date, description)
@@ -383,7 +384,12 @@ def _collect_pending_rows(
     return pending, skipped
 
 
-def _run_threaded_import(session: requests.Session, pending: list[PendingTransaction], account_id: int) -> None:
+def _run_threaded_import(
+    session: requests.Session,
+    pending: list[PendingTransaction],
+    account_id: int,
+    firefly_url: str,
+) -> None:
     ok = 0
     errors = 0
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
@@ -397,6 +403,7 @@ def _run_threaded_import(session: requests.Session, pending: list[PendingTransac
                     desc,
                     amount,
                     account_id,
+                    firefly_url,
                     False,
                     log=False,
                 )
@@ -419,6 +426,7 @@ def process_csv(
     session: requests.Session,
     csv_path: Path,
     account_id: int,
+    firefly_url: str,
     dry_run: bool = False,
     latest_date: date | None = None,
 ) -> None:
@@ -440,10 +448,10 @@ def process_csv(
 
     if dry_run:
         for date, description, amount in pending:
-            create_transaction(session, date, description, amount, account_id, dry_run=True)
+            create_transaction(session, date, description, amount, account_id, firefly_url, dry_run=True)
         logging.info(f"  Summa: {len(pending)} transaktioner")
     else:
-        _run_threaded_import(session, pending, account_id)
+        _run_threaded_import(session, pending, account_id, firefly_url)
 
     if skipped:
         logging.info(f"  Hoppade over: {skipped} rader")
@@ -453,6 +461,7 @@ def process_folder(
     session: requests.Session,
     folder: Path,
     account_map: dict[str, int],
+    firefly_url: str,
     dry_run: bool = False,
     ignore_latest_date_check: bool = False,
 ) -> None:
@@ -470,7 +479,7 @@ def process_folder(
 
     latest_date = None
     if not ignore_latest_date_check:
-        latest_date = get_latest_transaction_date(session, account_id)
+        latest_date = get_latest_transaction_date(session, account_id, firefly_url)
 
     logging.info(f"Konto ID {account_id}: {folder.name}")
     if ignore_latest_date_check:
@@ -480,26 +489,27 @@ def process_folder(
 
     for csv_path in csv_files:
         logging.info(f"Bearbetar: {csv_path.name}")
-        process_csv(session, csv_path, account_id, dry_run, latest_date)
+        process_csv(session, csv_path, account_id, firefly_url, dry_run, latest_date)
 
 
-def _parse_cli_args(argv: list[str]) -> tuple[str, bool, bool, bool]:
+def _parse_cli_args(argv: list[str]) -> tuple[str, bool, bool, bool, bool]:
     if len(argv) < 2:
         raise ValueError(
             "Användning: python3 import_firefly.py <sökväg> "
-            "[--dry-run] [--ignore-latest-date-check] [--refresh-accounts]"
+            "[--dry-run] [--ignore-latest-date-check] [--refresh-accounts] [--configure]"
         )
 
     dry_run = "--dry-run" in argv
     ignore_latest_date_check = "--ignore-latest-date-check" in argv
     refresh_accounts = "--refresh-accounts" in argv
+    configure = "--configure" in argv
 
     try:
         folder = next(arg for arg in argv[1:] if not arg.startswith("--"))
     except StopIteration as exc:
         raise ValueError("Sökväg saknas. Ange en mapp före eller efter flaggor.") from exc
 
-    return folder, dry_run, ignore_latest_date_check, refresh_accounts
+    return folder, dry_run, ignore_latest_date_check, refresh_accounts, configure
 
 
 def main(
@@ -507,6 +517,7 @@ def main(
     dry_run: bool = False,
     ignore_latest_date_check: bool = False,
     refresh_accounts: bool = False,
+    configure: bool = False,
 ) -> int:
     global BLOCK_TRANSACTION_POSTS
 
@@ -517,6 +528,7 @@ def main(
                 dry_run,
                 ignore_latest_date_check,
                 refresh_accounts,
+                configure,
             ) = _parse_cli_args(sys.argv)
         except ValueError as exc:
             print(str(exc))
@@ -526,7 +538,8 @@ def main(
 
     log_file = setup_logging()
 
-    token = get_token()
+    token = load_api_token(force=configure)
+    firefly_url = load_firefly_url(force=configure)
 
     session = requests.Session()
     session.headers.update(
@@ -538,7 +551,7 @@ def main(
     )
 
     base = Path(base_folder)
-    account_map, accounts = build_account_map(session, refresh=refresh_accounts)
+    account_map, accounts = build_account_map(session, firefly_url, refresh=refresh_accounts)
 
     if any(base.glob("*.csv")):
         folders = [base]
@@ -558,7 +571,7 @@ def main(
     logging.info(f"Loggar till: {log_file}")
 
     for folder in folders:
-        process_folder(session, folder, account_map, dry_run, ignore_latest_date_check)
+        process_folder(session, folder, account_map, firefly_url, dry_run, ignore_latest_date_check)
 
     logging.info("Klar!")
     return 0

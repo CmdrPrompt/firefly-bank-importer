@@ -19,6 +19,7 @@ from firefly_bank_importer.import_firefly import process_csv
 SEB_HEADERS = ["Bokföringsdatum", "Valutadatum", "Verifikationsnummer", "Text", "Belopp", "Saldo"]
 ICA_HEADERS = ["Datum", "Text", "Typ", "Belopp"]
 ACCOUNT_ID = 42
+FIREFLY_URL = "http://test.local:30105"
 
 
 def write_csv(path: Path, headers: list[str], rows: list[list[str]]) -> None:
@@ -51,7 +52,7 @@ class TestDryRunSeb:
             [["2025-01-10", "2025-01-10", "V1", "Shop", "-100,00", "900,00"]],
         )
         session = make_session()
-        process_csv(session, csv_path, ACCOUNT_ID, dry_run=True)
+        process_csv(session, csv_path, ACCOUNT_ID, FIREFLY_URL, dry_run=True)
         session.post.assert_not_called()
 
     def test_dry_run_logs_transaction(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
@@ -63,7 +64,7 @@ class TestDryRunSeb:
         )
         session = make_session()
         with caplog.at_level(logging.INFO):
-            process_csv(session, csv_path, ACCOUNT_ID, dry_run=True)
+            process_csv(session, csv_path, ACCOUNT_ID, FIREFLY_URL, dry_run=True)
         assert any("DRY RUN" in r.message for r in caplog.records)
 
     def test_dry_run_logs_correct_count(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
@@ -78,7 +79,7 @@ class TestDryRunSeb:
         )
         session = make_session()
         with caplog.at_level(logging.INFO):
-            process_csv(session, csv_path, ACCOUNT_ID, dry_run=True)
+            process_csv(session, csv_path, ACCOUNT_ID, FIREFLY_URL, dry_run=True)
         assert any("2 transaktioner" in r.message for r in caplog.records)
 
 
@@ -92,7 +93,7 @@ class TestDryRunIca:
         )
         session = make_session()
         with caplog.at_level(logging.INFO):
-            process_csv(session, csv_path, ACCOUNT_ID, dry_run=True)
+            process_csv(session, csv_path, ACCOUNT_ID, FIREFLY_URL, dry_run=True)
         assert any("ICA Maxi [Köp]" in r.message for r in caplog.records)
 
     def test_ica_no_post_calls(self, tmp_path: Path) -> None:
@@ -103,7 +104,7 @@ class TestDryRunIca:
             [["2025-03-10", "Mat", "Köp", "-150,00"]],
         )
         session = make_session()
-        process_csv(session, csv_path, ACCOUNT_ID, dry_run=True)
+        process_csv(session, csv_path, ACCOUNT_ID, FIREFLY_URL, dry_run=True)
         session.post.assert_not_called()
 
 
@@ -112,7 +113,7 @@ class TestUnknownFormat:
         csv_path = tmp_path / "2025-01.csv"
         write_csv(csv_path, ["Col1", "Col2"], [["val1", "val2"]])
         session = make_session()
-        process_csv(session, csv_path, ACCOUNT_ID, dry_run=True)
+        process_csv(session, csv_path, ACCOUNT_ID, FIREFLY_URL, dry_run=True)
         session.post.assert_not_called()
 
     def test_unknown_format_logs_error(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
@@ -120,7 +121,7 @@ class TestUnknownFormat:
         write_csv(csv_path, ["Col1", "Col2"], [["val1", "val2"]])
         session = make_session()
         with caplog.at_level(logging.ERROR):
-            process_csv(session, csv_path, ACCOUNT_ID)
+            process_csv(session, csv_path, ACCOUNT_ID, FIREFLY_URL)
         assert any("Okant CSV-format" in r.message for r in caplog.records)
 
 
@@ -137,7 +138,7 @@ class TestLatestDateFiltering:
         )
         session = make_session()
         with caplog.at_level(logging.INFO):
-            process_csv(session, csv_path, ACCOUNT_ID, dry_run=True, latest_date=None)
+            process_csv(session, csv_path, ACCOUNT_ID, FIREFLY_URL, dry_run=True, latest_date=None)
         assert any("2 transaktioner" in r.message for r in caplog.records)
 
     def test_rows_on_or_before_latest_date_skipped(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
@@ -156,6 +157,7 @@ class TestLatestDateFiltering:
                 session,
                 csv_path,
                 ACCOUNT_ID,
+                FIREFLY_URL,
                 dry_run=True,
                 latest_date=date(2025, 1, 5),
             )
@@ -175,6 +177,7 @@ class TestLatestDateFiltering:
                 session,
                 csv_path,
                 ACCOUNT_ID,
+                FIREFLY_URL,
                 dry_run=True,
                 latest_date=date(2025, 1, 10),
             )
@@ -196,6 +199,7 @@ class TestLatestDateFiltering:
                 session,
                 csv_path,
                 ACCOUNT_ID,
+                FIREFLY_URL,
                 dry_run=True,
                 latest_date=date(2025, 1, 10),
             )
@@ -214,6 +218,7 @@ class TestLatestDateFiltering:
                 session,
                 csv_path,
                 ACCOUNT_ID,
+                FIREFLY_URL,
                 dry_run=True,
                 latest_date=date(2025, 1, 10),
             )
@@ -232,7 +237,7 @@ class TestRealMode:
             ],
         )
         session = make_session(status_code=201)
-        process_csv(session, csv_path, ACCOUNT_ID, dry_run=False)
+        process_csv(session, csv_path, ACCOUNT_ID, FIREFLY_URL, dry_run=False)
         assert session.post.call_count == 2
 
     def test_post_not_called_when_no_pending(self, tmp_path: Path) -> None:
@@ -247,6 +252,7 @@ class TestRealMode:
             session,
             csv_path,
             ACCOUNT_ID,
+            FIREFLY_URL,
             dry_run=False,
             latest_date=date(2025, 1, 10),
         )
