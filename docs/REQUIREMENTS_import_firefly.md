@@ -169,6 +169,17 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 4. The core importer discovers and uses the package during normal processing.
 - Result: New bank formats can be added by extension rather than by editing core CSV detection logic.
 
+### UC-22: Upload CSV files in web UI
+- Actor: User
+- Preconditions: The web UI is running and at least one import folder exists.
+- Trigger: The user uploads one or more CSV files via the web UI.
+- Main flow:
+1. The user selects target import folder and one or more CSV files.
+2. The system validates file type and supported bank format via CSV headers.
+3. The system stores valid files in the selected import folder.
+4. The system reports per-file result (saved/rejected) with reason.
+- Result: Valid CSV files are placed in import folders without manual filesystem operations.
+
 ## 5. Functional Requirements
 
 ### FR-1 Token loading
@@ -285,6 +296,15 @@ The core importer shall consume bank format packages through a shared contract/i
 ### FR-36 Unsupported format handling in package architecture
 If no bank format package matches a CSV header, the script shall log an unknown-format error and skip the file.
 
+### FR-44 Web UI upload endpoint
+The system shall provide a web API endpoint that accepts CSV file uploads and a target import folder.
+
+### FR-45 Web UI upload validation
+The upload flow shall validate that uploaded files are CSV and that headers match a supported bank format before saving files.
+
+### FR-46 Web UI upload result feedback
+The upload flow shall return user-visible per-file feedback containing filename, save status, and rejection reason when validation fails.
+
 ## 6. Non-Functional Requirements
 
 ### NFR-1 Performance
@@ -364,6 +384,7 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | UC-12 | Configure Firefly connection on first run | Not implemented |
 | UC-13 | Resolve a bank export format through a format package | Implemented |
 | UC-14 | Add a new bank export format without changing the core importer | Implemented |
+| UC-22 | Upload CSV files in web UI | Not implemented |
 
 ### Functional Requirements
 
@@ -405,6 +426,9 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | FR-34 | Normalized field mapping | Implemented |
 | FR-35 | Shared importer contract for bank formats | Implemented |
 | FR-36 | Unsupported format handling in package architecture | Implemented |
+| FR-44 | Web UI upload endpoint | Not implemented |
+| FR-45 | Web UI upload validation | Not implemented |
+| FR-46 | Web UI upload result feedback | Not implemented |
 
 ### Non-Functional Requirements
 
