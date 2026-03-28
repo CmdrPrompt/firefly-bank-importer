@@ -1,7 +1,7 @@
 # TASK-019 Web UI live import progress
 
 ## Status
-todo
+in-progress
 
 ## Description
 Implement UC-19 in the web UI: run live import and stream progress/log output during execution.

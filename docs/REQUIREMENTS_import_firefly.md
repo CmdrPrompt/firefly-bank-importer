@@ -180,6 +180,17 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 4. The web UI shows the summary and blocks live import when unresolved errors exist.
 - Result: The user can verify what would be imported before executing live import.
 
+### UC-19: Run live import with progress in web UI
+- Actor: User
+- Preconditions: Dry-run preview is completed and contains no blocking errors.
+- Trigger: The user starts live import from the web UI.
+- Main flow:
+1. The web UI starts an asynchronous live-import job for selected folders and mappings.
+2. The backend processes files and transactions while emitting incremental progress updates.
+3. The web UI receives and renders progress updates in near real time.
+4. When the job finishes, the web UI shows a completion summary with imported, skipped, and failed counts.
+- Result: The user can monitor live import execution and outcome without terminal access.
+
 ### UC-23: Clear old import logs
 - Actor: User
 - Trigger: The user chooses to clear logs from CLI or web UI.
@@ -321,6 +332,15 @@ The dry-run preview response and UI shall include, at minimum, per-folder and to
 ### FR-40 Live-import guard from preview
 The web UI shall prevent continuing to live import when dry-run preview reports unresolved mapping errors or fatal parsing/validation errors.
 
+### FR-41 Web UI live import job start
+The system shall provide an API endpoint that starts a live-import job asynchronously for selected folders and resolved account mappings.
+
+### FR-42 Web UI live progress stream
+The system shall provide progress updates for running live-import jobs, including job state, current folder/file context, and cumulative imported/skipped/failed counts.
+
+### FR-43 Web UI live import completion summary
+When a live-import job completes, the system shall expose a completion summary containing imported, skipped, and failed totals and any terminal errors.
+
 ## 6. Non-Functional Requirements
 
 ### NFR-1 Performance
@@ -402,6 +422,7 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | UC-13 | Resolve a bank export format through a format package | Implemented |
 | UC-14 | Add a new bank export format without changing the core importer | Implemented |
 | UC-18 | Preview dry-run import in web UI | Not implemented |
+| UC-19 | Run live import with progress in web UI | Not implemented |
 | UC-23 | Clear old import logs | Not implemented |
 
 ### Functional Requirements
@@ -448,6 +469,9 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | FR-38 | Web UI dry-run preview API | Not implemented |
 | FR-39 | Web UI preview content | Not implemented |
 | FR-40 | Live-import guard from preview | Not implemented |
+| FR-41 | Web UI live import job start | Not implemented |
+| FR-42 | Web UI live progress stream | Not implemented |
+| FR-43 | Web UI live import completion summary | Not implemented |
 
 ### Non-Functional Requirements
 
