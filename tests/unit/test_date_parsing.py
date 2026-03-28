@@ -11,6 +11,8 @@ from hypothesis import strategies as st
 
 from firefly_bank_importer.import_firefly import get_latest_transaction_date
 
+FIREFLY_URL = "http://test.local:30105"
+
 
 def _make_session(status_code: int = 200, json_body: object = None) -> MagicMock:
     response = MagicMock()
@@ -28,64 +30,64 @@ def _make_transaction_response(date_str: str) -> dict[str, object]:
 class TestGetLatestTransactionDateHappyPath:
     def test_returns_date_from_iso_datetime(self) -> None:
         session = _make_session(200, _make_transaction_response("2025-03-15T12:00:00+00:00"))
-        result = get_latest_transaction_date(session, account_id=1)
+        result = get_latest_transaction_date(session, account_id=1, firefly_url=FIREFLY_URL)
         assert result == date(2025, 3, 15)
 
     def test_returns_date_from_date_only_string(self) -> None:
         session = _make_session(200, _make_transaction_response("2025-03-15"))
-        result = get_latest_transaction_date(session, account_id=1)
+        result = get_latest_transaction_date(session, account_id=1, firefly_url=FIREFLY_URL)
         assert result == date(2025, 3, 15)
 
     def test_returns_date_type(self) -> None:
         session = _make_session(200, _make_transaction_response("2025-01-01"))
-        result = get_latest_transaction_date(session, account_id=1)
+        result = get_latest_transaction_date(session, account_id=1, firefly_url=FIREFLY_URL)
         assert isinstance(result, date)
 
     def test_year_boundary_december(self) -> None:
         session = _make_session(200, _make_transaction_response("2024-12-31"))
-        result = get_latest_transaction_date(session, account_id=1)
+        result = get_latest_transaction_date(session, account_id=1, firefly_url=FIREFLY_URL)
         assert result == date(2024, 12, 31)
 
     def test_year_boundary_january(self) -> None:
         session = _make_session(200, _make_transaction_response("2025-01-01"))
-        result = get_latest_transaction_date(session, account_id=1)
+        result = get_latest_transaction_date(session, account_id=1, firefly_url=FIREFLY_URL)
         assert result == date(2025, 1, 1)
 
     def test_end_of_month(self) -> None:
         session = _make_session(200, _make_transaction_response("2025-01-31"))
-        result = get_latest_transaction_date(session, account_id=1)
+        result = get_latest_transaction_date(session, account_id=1, firefly_url=FIREFLY_URL)
         assert result == date(2025, 1, 31)
 
 
 class TestGetLatestTransactionDateErrorCases:
     def test_non_200_status_returns_none(self) -> None:
         session = _make_session(status_code=404)
-        result = get_latest_transaction_date(session, account_id=1)
+        result = get_latest_transaction_date(session, account_id=1, firefly_url=FIREFLY_URL)
         assert result is None
 
     def test_500_status_returns_none(self) -> None:
         session = _make_session(status_code=500)
-        result = get_latest_transaction_date(session, account_id=1)
+        result = get_latest_transaction_date(session, account_id=1, firefly_url=FIREFLY_URL)
         assert result is None
 
     def test_empty_data_list_returns_none(self) -> None:
         session = _make_session(200, {"data": []})
-        result = get_latest_transaction_date(session, account_id=1)
+        result = get_latest_transaction_date(session, account_id=1, firefly_url=FIREFLY_URL)
         assert result is None
 
     def test_missing_data_key_returns_none(self) -> None:
         session = _make_session(200, {})
-        result = get_latest_transaction_date(session, account_id=1)
+        result = get_latest_transaction_date(session, account_id=1, firefly_url=FIREFLY_URL)
         assert result is None
 
     def test_empty_transactions_list_returns_none(self) -> None:
         session = _make_session(200, {"data": [{"attributes": {"transactions": []}}]})
-        result = get_latest_transaction_date(session, account_id=1)
+        result = get_latest_transaction_date(session, account_id=1, firefly_url=FIREFLY_URL)
         assert result is None
 
     def test_missing_transactions_key_returns_none(self) -> None:
         session = _make_session(200, {"data": [{"attributes": {}}]})
-        result = get_latest_transaction_date(session, account_id=1)
+        result = get_latest_transaction_date(session, account_id=1, firefly_url=FIREFLY_URL)
         assert result is None
 
 
@@ -99,5 +101,5 @@ class TestGetLatestTransactionDateHypothesis:
     def test_date_prefix_correctly_parsed(self, year: int, month: int, day: int) -> None:
         date_str = f"{year:04d}-{month:02d}-{day:02d}T00:00:00+00:00"
         session = _make_session(200, _make_transaction_response(date_str))
-        result = get_latest_transaction_date(session, account_id=42)
+        result = get_latest_transaction_date(session, account_id=42, firefly_url=FIREFLY_URL)
         assert result == date(year, month, day)
