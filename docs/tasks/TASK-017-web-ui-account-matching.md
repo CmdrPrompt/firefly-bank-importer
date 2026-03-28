@@ -13,7 +13,7 @@ Implement UC-17 in the web UI: allow interactive mapping between selected folder
 
 ## Completion
 **Date:** YYYY-MM-DD
-**Summary:** 
+**Summary:**
 **Files changed:**
 - `path/to/file` -- created / modified
 **Branch:** `git checkout -b task/017-web-ui-account-matching`
