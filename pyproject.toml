@@ -37,6 +37,15 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 [tool.mypy]
 strict = true
 python_version = "3.11"
+mypy_path = "src"
+
+[[tool.mypy.overrides]]
+module = [
+    "pytest",
+    "hypothesis",
+    "hypothesis.strategies",
+]
+ignore_missing_imports = true
 
 [tool.coverage.run]
 source = ["src"]
@@ -48,20 +57,8 @@ show_missing = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
 [dependency-groups]
 dev = [
     "pymarkdownlnt>=0.9.36",
 ]
-
-[tool.mypy]
-strict = true
-python_version = "3.11"
-mypy_path = "src"
-
-[[tool.mypy.overrides]]
-module = [
-    "pytest",
-    "hypothesis",
-    "hypothesis.strategies",
-]
-ignore_missing_imports = true
