@@ -169,6 +169,17 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 4. The core importer discovers and uses the package during normal processing.
 - Result: New bank formats can be added by extension rather than by editing core CSV detection logic.
 
+### UC-18: Preview dry-run import in web UI
+- Actor: User
+- Preconditions: One or more import folders are selected and mapped to Firefly accounts in the web UI.
+- Trigger: The user requests a dry-run preview before live import.
+- Main flow:
+1. The web UI validates that each selected folder has a resolved destination account.
+2. The system parses files in selected folders using the existing format resolution and duplicate-date rules.
+3. The system computes a preview summary per folder and total, including candidate transactions, skipped duplicates, date range, and parsing warnings/errors.
+4. The web UI shows the summary and blocks live import when unresolved errors exist.
+- Result: The user can verify what would be imported before executing live import.
+
 ### UC-23: Clear old import logs
 - Actor: User
 - Trigger: The user chooses to clear logs from CLI or web UI.
@@ -301,6 +312,15 @@ The system shall provide a log-cleanup operation that supports:
 - deleting import log files older than a user-provided retention period in days,
 with explicit confirmation before destructive action.
 
+### FR-38 Web UI dry-run preview API
+The system shall provide a web API endpoint that returns a dry-run preview summary for selected folders and account mappings without creating transactions in Firefly.
+
+### FR-39 Web UI preview content
+The dry-run preview response and UI shall include, at minimum, per-folder and total counts for candidate transactions, duplicate-skipped rows, date range, and parsing/validation warnings.
+
+### FR-40 Live-import guard from preview
+The web UI shall prevent continuing to live import when dry-run preview reports unresolved mapping errors or fatal parsing/validation errors.
+
 ## 6. Non-Functional Requirements
 
 ### NFR-1 Performance
@@ -381,6 +401,7 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | UC-12 | Configure Firefly connection on first run | Not implemented |
 | UC-13 | Resolve a bank export format through a format package | Implemented |
 | UC-14 | Add a new bank export format without changing the core importer | Implemented |
+| UC-18 | Preview dry-run import in web UI | Not implemented |
 | UC-23 | Clear old import logs | Not implemented |
 
 ### Functional Requirements
@@ -424,6 +445,9 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | FR-35 | Shared importer contract for bank formats | Implemented |
 | FR-36 | Unsupported format handling in package architecture | Implemented |
 | FR-37 | Log cleanup command | Not implemented |
+| FR-38 | Web UI dry-run preview API | Not implemented |
+| FR-39 | Web UI preview content | Not implemented |
+| FR-40 | Live-import guard from preview | Not implemented |
 
 ### Non-Functional Requirements
 

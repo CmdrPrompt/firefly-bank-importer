@@ -1,17 +1,25 @@
 from __future__ import annotations
 
 import csv
+import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from html import escape
 from pathlib import Path
 from typing import Any, TypedDict
 
+import requests
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 
 from firefly_bank_importer.bank_formats import resolve_bank_format
-from firefly_bank_importer.import_firefly import find_account_id, load_account_cache, sanitize_folder_name
+from firefly_bank_importer.config import CONFIG_FILE, SECRETS_FILE, TOKEN_FILE
+from firefly_bank_importer.import_firefly import (
+    find_account_id,
+    get_latest_transaction_date,
+    load_account_cache,
+    sanitize_folder_name,
+)
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_IMPORT_BASE = _PROJECT_ROOT / "bankImports"
@@ -20,6 +28,25 @@ _DEFAULT_IMPORT_BASE = _PROJECT_ROOT / "bankImports"
 class AccountCandidate(TypedDict):
     id: int
     name: str
+
+
+class FolderDryRunSummary(TypedDict):
+    folder: str
+    account_id: int | None
+    account_name: str | None
+    file_count: int
+    candidate_transactions: int
+    duplicate_skips: int
+    date_from: str | None
+    date_to: str | None
+    warnings: list[str]
+    errors: list[str]
+
+
+class DryRunSummary(TypedDict):
+    folders: list[FolderDryRunSummary]
+    totals: dict[str, int]
+    can_continue: bool
 
 
 @dataclass
@@ -88,6 +115,228 @@ def _read_file_preview(csv_path: Path) -> FilePreview:
         csv_format=bank_format.name if bank_format is not None else "unknown",
         date_from=min_date.strftime("%Y-%m-%d") if min_date is not None else None,
         date_to=max_date.strftime("%Y-%m-%d") if max_date is not None else None,
+    )
+
+
+def _load_web_firefly_settings() -> tuple[str | None, str | None, list[str]]:
+    warnings: list[str] = []
+    firefly_url: str | None = None
+    api_token: str | None = None
+
+    if CONFIG_FILE.exists():
+        try:
+            data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+            raw_url = str(data.get("firefly_url", "")).strip()
+            firefly_url = raw_url or None
+        except json.JSONDecodeError:
+            warnings.append("Kunde inte läsa config.json.")
+    else:
+        warnings.append("config.json saknas; latest-date-kontroll hoppas över.")
+
+    if SECRETS_FILE.exists():
+        try:
+            data = json.loads(SECRETS_FILE.read_text(encoding="utf-8"))
+            raw_token = str(data.get("api_token", "")).strip()
+            api_token = raw_token or None
+        except json.JSONDecodeError:
+            warnings.append("Kunde inte läsa secrets.json.")
+    elif TOKEN_FILE.exists():
+        raw_token = TOKEN_FILE.read_text(encoding="utf-8").strip()
+        api_token = raw_token or None
+    else:
+        warnings.append("Ingen API-token hittades; latest-date-kontroll hoppas över.")
+
+    if firefly_url is None or api_token is None:
+        warnings.append("Kunde inte läsa Firefly-inställningar; duplicate-skip uppskattas som 0.")
+
+    return firefly_url, api_token, warnings
+
+
+def _fetch_latest_dates(account_ids: set[int]) -> tuple[dict[int, date], list[str]]:
+    if not account_ids:
+        return {}, []
+
+    firefly_url, api_token, warnings = _load_web_firefly_settings()
+    if firefly_url is None or api_token is None:
+        return {}, warnings
+
+    latest_dates: dict[int, date] = {}
+    session = requests.Session()
+    session.headers.update({"Authorization": f"Bearer {api_token}", "Accept": "application/json"})
+
+    for account_id in account_ids:
+        try:
+            latest = get_latest_transaction_date(session, account_id, firefly_url)
+            if latest is not None:
+                latest_dates[account_id] = latest
+        except (requests.RequestException, ValueError):
+            warnings.append(f"Kunde inte hämta senaste transaktionsdatum för konto {account_id}.")
+
+    return latest_dates, warnings
+
+
+def _build_dry_run_summary(selected_folders: list[str], import_base: Path) -> DryRunSummary:
+    accounts = load_account_cache()
+    account_map = {a["name"]: a["id"] for a in accounts} if accounts else {}
+    account_names_by_id = {a["id"]: a["name"] for a in accounts} if accounts else {}
+
+    previews: list[FolderDryRunSummary] = []
+    account_ids_to_lookup: set[int] = set()
+
+    for folder_name in selected_folders:
+        folder_errors: list[str] = []
+        folder_warnings: list[str] = []
+        folder_path = import_base / folder_name
+
+        account_id = find_account_id(folder_name, account_map) if account_map else None
+        if account_id is not None:
+            account_ids_to_lookup.add(account_id)
+        else:
+            folder_errors.append("Ingen kontomatchning hittades för mappen.")
+
+        if not folder_path.exists() or not folder_path.is_dir():
+            folder_errors.append("Mappen finns inte.")
+            previews.append(
+                {
+                    "folder": folder_name,
+                    "account_id": account_id,
+                    "account_name": account_names_by_id.get(account_id) if account_id is not None else None,
+                    "file_count": 0,
+                    "candidate_transactions": 0,
+                    "duplicate_skips": 0,
+                    "date_from": None,
+                    "date_to": None,
+                    "warnings": folder_warnings,
+                    "errors": folder_errors,
+                }
+            )
+            continue
+
+        previews.append(
+            {
+                "folder": folder_name,
+                "account_id": account_id,
+                "account_name": account_names_by_id.get(account_id) if account_id is not None else None,
+                "file_count": len(list(folder_path.glob("*.csv"))),
+                "candidate_transactions": 0,
+                "duplicate_skips": 0,
+                "date_from": None,
+                "date_to": None,
+                "warnings": folder_warnings,
+                "errors": folder_errors,
+            }
+        )
+
+    latest_dates, global_warnings = _fetch_latest_dates(account_ids_to_lookup)
+
+    for preview in previews:
+        folder_path = import_base / preview["folder"]
+        if not folder_path.exists() or not folder_path.is_dir():
+            continue
+
+        min_date: datetime | None = None
+        max_date: datetime | None = None
+
+        for csv_path in sorted(folder_path.glob("*.csv")):
+            with csv_path.open(encoding="utf-8-sig") as handle:
+                reader = csv.reader(handle, delimiter=";")
+                headers = next(reader, None)
+                if headers is None:
+                    preview["warnings"].append(f"{csv_path.name}: filen är tom.")
+                    continue
+
+                bank_format = resolve_bank_format(headers)
+                if bank_format is None:
+                    preview["errors"].append(f"{csv_path.name}: okänt CSV-format.")
+                    continue
+
+                mapping = bank_format.build_column_mapping(headers)
+                latest_for_account = (
+                    latest_dates.get(preview["account_id"]) if preview["account_id"] is not None else None
+                )
+
+                for row in reader:
+                    if mapping.date_idx >= len(row):
+                        preview["warnings"].append(f"{csv_path.name}: rad saknar datumkolumn.")
+                        continue
+
+                    try:
+                        row_dt = datetime.strptime(row[mapping.date_idx], "%Y-%m-%d")
+                    except ValueError:
+                        preview["warnings"].append(f"{csv_path.name}: ogiltigt datum '{row[mapping.date_idx]}'.")
+                        continue
+
+                    if latest_for_account is not None and row_dt.date() <= latest_for_account:
+                        preview["duplicate_skips"] += 1
+                        continue
+
+                    preview["candidate_transactions"] += 1
+                    if min_date is None or row_dt < min_date:
+                        min_date = row_dt
+                    if max_date is None or row_dt > max_date:
+                        max_date = row_dt
+
+        preview["date_from"] = min_date.strftime("%Y-%m-%d") if min_date is not None else None
+        preview["date_to"] = max_date.strftime("%Y-%m-%d") if max_date is not None else None
+
+        if global_warnings:
+            preview["warnings"].extend(global_warnings)
+
+    totals = {
+        "candidate_transactions": sum(item["candidate_transactions"] for item in previews),
+        "duplicate_skips": sum(item["duplicate_skips"] for item in previews),
+        "warnings": sum(len(item["warnings"]) for item in previews),
+        "errors": sum(len(item["errors"]) for item in previews),
+    }
+
+    can_continue = totals["errors"] == 0
+    return {
+        "folders": previews,
+        "totals": totals,
+        "can_continue": can_continue,
+    }
+
+
+def _render_dry_run_preview(summary: DryRunSummary) -> str:
+    rows: list[str] = []
+    for folder in summary["folders"]:
+        warnings_html = "<br>".join(escape(w) for w in folder["warnings"]) or "-"
+        errors_html = "<br>".join(escape(e) for e in folder["errors"]) or "-"
+        rows.append(
+            "".join(
+                [
+                    "<tr>",
+                    f"<td>{escape(folder['folder'])}</td>",
+                    f"<td>{escape(folder['account_name'] or '-')}</td>",
+                    f"<td>{folder['candidate_transactions']}</td>",
+                    f"<td>{folder['duplicate_skips']}</td>",
+                    f"<td>{escape(folder['date_from'] or '-')}</td>",
+                    f"<td>{escape(folder['date_to'] or '-')}</td>",
+                    f"<td>{warnings_html}</td>",
+                    f"<td>{errors_html}</td>",
+                    "</tr>",
+                ]
+            )
+        )
+
+    guard_text = (
+        "<p style='color:green;'>Dry-run klar: inga blockerande fel upptäcktes.</p>"
+        if summary["can_continue"]
+        else "<p style='color:red;'>Live import blockerad: åtgärda fel innan du fortsätter.</p>"
+    )
+
+    return (
+        "<h1>Dry-run preview</h1>"
+        "<table border='1' cellpadding='6' cellspacing='0'>"
+        "<thead><tr><th>Mapp</th><th>Konto</th><th>Kandidater</th><th>Duplicate-skips</th>"
+        "<th>Datum från</th><th>Datum till</th><th>Varningar</th><th>Fel</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody>"
+        "</table>"
+        f"<p>Totalt kandidater: {summary['totals']['candidate_transactions']}</p>"
+        f"<p>Totalt duplicate-skips: {summary['totals']['duplicate_skips']}</p>"
+        f"<p>Totalt varningar: {summary['totals']['warnings']}</p>"
+        f"<p>Totalt fel: {summary['totals']['errors']}</p>"
+        f"{guard_text}"
     )
 
 
@@ -312,6 +561,27 @@ def create_app(base_folder: Path | None = None) -> FastAPI:
             "best_match": best_match_id,
             "candidates": candidates,
         }
+
+    @app.get("/api/dry-run-preview")
+    def api_dry_run_preview(request: Request) -> dict[str, Any]:
+        folders = request.query_params.getlist("folder")
+        summary = _build_dry_run_summary(folders, import_base)
+        return {
+            "folders": summary["folders"],
+            "totals": summary["totals"],
+            "can_continue": summary["can_continue"],
+        }
+
+    @app.get("/preview", response_class=HTMLResponse)
+    def preview_page(request: Request) -> str:
+        folders = request.query_params.getlist("folder")
+        summary = _build_dry_run_summary(folders, import_base)
+        return (
+            "<html><head><meta charset='utf-8'><title>Dry-run preview</title></head><body>"
+            f"{_render_dry_run_preview(summary)}"
+            "<p><a href='/'>Tillbaka</a></p>"
+            "</body></html>"
+        )
 
     return app
 
