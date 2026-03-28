@@ -33,3 +33,5 @@ cases (no match, prefix stripping, substring both ways, Swedish chars in account
 multiple matches → longest wins). All 37 tests pass, ruff clean.
 **Files changed:**
 - `tests/unit/test_account_matching.py` — created
+**Stage:** `git add tests/unit/test_account_matching.py docs/tasks/TASK-003-tests-sanitize-find-account.md`
+**Commit:** `git commit -m "Add characterisation tests for sanitize_folder_name and find_account_id"`
