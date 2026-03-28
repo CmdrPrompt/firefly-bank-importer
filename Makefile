@@ -1,4 +1,6 @@
-.PHONY: all help setup install lint fix stage task-stage test clean
+.PHONY: all help setup install lint fix stage stage-task commit-task test clean
+
+TASKS_DIR := docs/tasks
 
 all: help
 
@@ -12,12 +14,18 @@ help:
 	@echo "    make install  -- Create venv, install dependencies and activate pre-commit"
 	@echo ""
 	@echo "  Daily use:"
-	@echo "    make lint     -- Run ruff, mypy, pymarkdown and radon (cognitive complexity)"
-	@echo "    make fix      -- Auto-fix ruff and pymarkdown issues"
+	@echo "    make lint        -- Run ruff, mypy, pymarkdown and radon (cognitive complexity)"
+	@echo "    make fix         -- Auto-fix ruff and pymarkdown issues"
 	@echo "    make stage       -- Auto-fix and re-stage all staged changes (run before git commit)"
-	@echo "    make task-stage  -- Auto-fix and stage files from task file: make task-stage f=docs/tasks/TASK-001-...md"
+	@echo "    make stage-task  -- Auto-fix and stage files listed in task file: make stage-task f=TASK-001"
+	@echo "    make commit-task -- Commit using message from task file: make commit-task f=TASK-001"
 	@echo "    make test        -- Run pytest with coverage"
-	@echo "    make clean    -- Remove venv and cache"
+	@echo "    make clean       -- Remove venv and cache"
+	@echo ""
+	@echo "  Commit workflow for a task:"
+	@echo "    make stage-task f=TASK-001   # fix + stage files listed in task"
+	@echo "    git diff --staged            # optional: review before committing"
+	@echo "    make commit-task f=TASK-001  # commit with message from task file"
 	@echo ""
 
 ## Install uv if missing (run once per machine)
@@ -53,17 +61,29 @@ stage:
 	[ -n "$$STAGED" ] && echo "$$STAGED" | xargs git add -- || true; \
 	git update-index -q --refresh
 
-## Stage files listed in a task file: make task-stage f=docs/tasks/TASK-001-...md
-task-stage:
-	@[ -n "$(f)" ] || (echo "Usage: make task-stage f=<task-file>"; exit 1)
-	@CMD=$$(grep '^\*\*Stage:\*\*' "$(f)" | sed 's/\*\*Stage:\*\* `//;s/`$$//'); \
-	[ -n "$$CMD" ] || (echo "No **Stage:** line found in $(f)"; exit 1); \
+## Auto-fix and stage files listed in a task file: make stage-task f=TASK-001
+stage-task:
+	@[ -n "$(f)" ] || (echo "Usage: make stage-task f=<task-id-or-filename>"; exit 1)
+	@TASK_FILE=$$(find $(TASKS_DIR) -name "$(f)*.md" | head -1); \
+	[ -n "$$TASK_FILE" ] || (echo "No task file found matching '$(f)' in $(TASKS_DIR)"; exit 1); \
+	CMD=$$(grep '\*\*Stage:\*\*' "$$TASK_FILE" | sed 's/.*`\(git add[^`]*\)`.*/\1/'); \
+	[ -n "$$CMD" ] || (echo "No **Stage:** line found in $$TASK_FILE"; exit 1); \
 	uv run ruff check --fix .; \
 	uv run ruff format .; \
 	uv run pymarkdown --config .pymarkdown fix $$(find . -name "*.md" -not -path "./.venv/*"); \
 	echo "Running: $$CMD"; \
 	eval "$$CMD"; \
 	git update-index -q --refresh
+
+## Commit using message from task file: make commit-task f=TASK-001
+commit-task:
+	@[ -n "$(f)" ] || (echo "Usage: make commit-task f=<task-id-or-filename>"; exit 1)
+	@TASK_FILE=$$(find $(TASKS_DIR) -name "$(f)*.md" | head -1); \
+	[ -n "$$TASK_FILE" ] || (echo "No task file found matching '$(f)' in $(TASKS_DIR)"; exit 1); \
+	MSG=$$(grep '\*\*Commit:\*\*' "$$TASK_FILE" | sed 's/.*`git commit -m "\(.*\)"`.*/\1/'); \
+	[ -n "$$MSG" ] || (echo "No **Commit:** line found in $$TASK_FILE"; exit 1); \
+	echo "Running: git commit -m \"$$MSG\""; \
+	git commit -m "$$MSG"
 
 ## Run tests with coverage
 test:
