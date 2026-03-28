@@ -14,12 +14,15 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 - Discover available destination asset accounts from Firefly instead of relying on a hardcoded list.
 - Cache discovered accounts locally so they can be reused in later runs.
 - Store Firefly URL and API token in local files so the user is only prompted once.
+- Isolate bank export formats in separate packages so new banks can be added without changing the core importer.
+- Identify bank export formats by reading CSV headers and mapping source columns to Firefly-relevant fields through bank-specific format packages.
 
 ## 3. System Context
 - Input: CSV files in account folders.
 - Configuration: Firefly URL in config.json in the project root.
 - Configuration: API token in secrets.json in the project root (token file supported as fallback).
 - Configuration: cached account list file generated from Firefly account discovery.
+- Bank format packages: local Python packages that describe how a bank export file is recognized and how its columns map to normalized transaction fields.
 - Target environment: Firefly III API.
 - Output: created transactions in Firefly III and a log file named import_YYYYMMDD_HHMMSS.log.
 
@@ -145,6 +148,27 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 6. The script continues with normal startup once both values are available.
 - Result: config.json and secrets.json are created and used on all subsequent runs without prompting.
 
+### UC-13: Resolve a bank export format through a format package
+- Actor: System
+- Trigger: The script opens a CSV file for split or import.
+- Main flow:
+1. The script reads the CSV header row.
+2. The script evaluates registered bank format packages against the header.
+3. The script selects the matching format package.
+4. The format package provides a mapping from source columns to normalized fields required by the importer.
+5. The script uses the normalized mapping for split and import processing.
+- Result: The core importer can process supported bank formats without embedding bank-specific parsing rules in the main module.
+
+### UC-14: Add a new bank export format without changing the core importer
+- Actor: Developer
+- Trigger: A new bank export CSV format needs to be supported.
+- Main flow:
+1. The developer creates a new bank format package in the designated format-package location.
+2. The package declares how to recognize the CSV header.
+3. The package declares how CSV columns map to normalized transaction fields.
+4. The core importer discovers and uses the package during normal processing.
+- Result: New bank formats can be added by extension rather than by editing core CSV detection logic.
+
 ## 5. Functional Requirements
 
 ### FR-1 Token loading
@@ -246,6 +270,21 @@ The script shall read the API token from secrets.json in the project root. If se
 ### FR-31 --configure flag
 The --configure flag shall force the interactive configuration flow for both URL and token, overwriting existing values in config.json and secrets.json.
 
+### FR-32 Bank format packages
+Bank-specific CSV recognition and field-mapping rules shall be implemented in separate packages/modules rather than hardcoded in the core importer module.
+
+### FR-33 Header-based format resolution
+Before splitting or importing a CSV file, the script shall read the header row and resolve the appropriate bank format package from the registered format packages.
+
+### FR-34 Normalized field mapping
+Each bank format package shall expose a mapping from source CSV columns to a normalized transaction model containing at least transaction date, description, amount, and any optional transaction-type field needed by the importer.
+
+### FR-35 Shared importer contract for bank formats
+The core importer shall consume bank format packages through a shared contract/interface so that split and import logic can operate on normalized fields instead of bank-specific column names.
+
+### FR-36 Unsupported format handling in package architecture
+If no bank format package matches a CSV header, the script shall log an unknown-format error and skip the file.
+
 ## 6. Non-Functional Requirements
 
 ### NFR-1 Performance
@@ -271,6 +310,9 @@ Cache reads and writes shall be atomic enough to avoid partial-file corruption d
 
 ### NFR-8 Observability for discovery and cache
 The script shall log whether account data came from live discovery or cache, including cache age.
+
+### NFR-9 Extensibility of bank formats
+Adding support for a new bank export format should require adding or registering a new format package with minimal or no changes to the core importer workflow.
 
 ## 7. Constraints and Assumptions
 - CSV dates are assumed to be in YYYY-MM-DD format.
@@ -320,6 +362,8 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | UC-10 | Fallback when Firefly account discovery is unavailable | Implemented |
 | UC-11 | Automatic creation of import folders | Implemented |
 | UC-12 | Configure Firefly connection on first run | Not implemented |
+| UC-13 | Resolve a bank export format through a format package | Implemented |
+| UC-14 | Add a new bank export format without changing the core importer | Implemented |
 
 ### Functional Requirements
 
@@ -356,6 +400,11 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | FR-29 | Firefly URL from configuration file | Not implemented |
 | FR-30 | API token from secrets file | Not implemented |
 | FR-31 | --configure flag | Not implemented |
+| FR-32 | Bank format packages | Implemented |
+| FR-33 | Header-based format resolution | Implemented |
+| FR-34 | Normalized field mapping | Implemented |
+| FR-35 | Shared importer contract for bank formats | Implemented |
+| FR-36 | Unsupported format handling in package architecture | Implemented |
 
 ### Non-Functional Requirements
 
@@ -369,3 +418,4 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | NFR-6 | Startup efficiency | Implemented |
 | NFR-7 | Cache reliability | Partial — cache is written atomically by Path.write_text but no temp-file swap is used |
 | NFR-8 | Observability for discovery and cache | Implemented |
+| NFR-9 | Extensibility of bank formats | Implemented |

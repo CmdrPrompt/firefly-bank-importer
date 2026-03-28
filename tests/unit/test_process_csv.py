@@ -13,8 +13,10 @@ from unittest.mock import MagicMock
 import pytest
 import requests
 
+import firefly_bank_importer.bank_formats as bank_formats
 import firefly_bank_importer.import_firefly as module
 from firefly_bank_importer.import_firefly import process_csv
+from tests.unit.dummy_bank_format import DUMMY_FORMAT, DUMMY_HEADERS
 
 SEB_HEADERS = ["Bokföringsdatum", "Valutadatum", "Verifikationsnummer", "Text", "Belopp", "Saldo"]
 ICA_HEADERS = ["Datum", "Text", "Typ", "Belopp"]
@@ -41,6 +43,15 @@ def make_session(status_code: int = 201) -> MagicMock:
 @pytest.fixture(autouse=True)
 def no_block(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(module, "BLOCK_TRANSACTION_POSTS", False)
+
+
+@pytest.fixture()
+def register_dummy_bank_format(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        bank_formats,
+        "_REGISTERED_BANK_FORMATS",
+        bank_formats.get_registered_bank_formats() + (DUMMY_FORMAT,),
+    )
 
 
 class TestDryRunSeb:
@@ -123,6 +134,27 @@ class TestUnknownFormat:
         with caplog.at_level(logging.ERROR):
             process_csv(session, csv_path, ACCOUNT_ID, FIREFLY_URL)
         assert any("Okant CSV-format" in r.message for r in caplog.records)
+
+
+class TestExtensibilityWithRegisteredDummyBank:
+    def test_dummy_bank_format_works_through_process_csv(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+        register_dummy_bank_format: None,
+    ) -> None:
+        csv_path = tmp_path / "2025-07.csv"
+        write_csv(
+            csv_path,
+            DUMMY_HEADERS,
+            [["2025-07-10", "Coffee", "Card", "-45,50", "2 345,00"]],
+        )
+        session = make_session()
+        with caplog.at_level(logging.INFO):
+            process_csv(session, csv_path, ACCOUNT_ID, FIREFLY_URL, dry_run=True)
+        session.post.assert_not_called()
+        assert any("Format: DUMMYBANK" in r.message for r in caplog.records)
+        assert any("Coffee [Card]" in r.message for r in caplog.records)
 
 
 class TestLatestDateFiltering:
