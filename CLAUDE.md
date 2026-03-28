@@ -31,8 +31,65 @@ All changes and additions to the application must be grounded in the requirement
 
 If a proposed change cannot be clearly expressed as a requirement and use case, it should not be implemented.
 
+## Task Management
+
+Tasks are tracked as individual files in `docs/tasks/`. Each file represents one task.
+
+**File naming:** `TASK-001-short-description.md`
+
+**Task file template:**
+
+```markdown
+# TASK-001 Short description
+
+## Status
+todo | in-progress | done
+
+## Description
+What needs to be done and why.
+
+## Acceptance criteria
+- [ ] Criterion 1
+- [ ] Criterion 2
+
+## Completion
+**Date:** YYYY-MM-DD
+**Summary:** What was done, any decisions made, and what was left out and why.
+```
+
+When starting a task, update `Status` to `in-progress`. When done, update `Status` to
+`done` and fill in the `Completion` section with date and a brief summary before committing.
+
+New tasks can be created by the user, by Claude Code, or by another LLM. Claude Code
+should check `docs/tasks/` for open tasks relevant to the current context before starting work.
+
+## Adding Tests to Untested Code
+
+The existing codebase has no unit tests. When adding tests to untested functionality,
+follow this workflow rather than the standard TDD cycle:
+
+1. **Analyse** the function or module to understand its current behavior -- do not assume it is correct
+2. **Write characterisation tests** that document the current behavior as-is, to establish a safety net
+3. **Present the tests** to the user before committing -- note any behavior that looks incorrect or surprising
+4. **Refactor** only after characterisation tests are in place and confirmed
+5. **Replace** characterisation tests with proper requirement-driven tests during refactoring
+
+**Prioritisation order** for adding tests (highest risk first):
+1. Date parsing and duplicate-detection logic
+2. CSV parsing and format detection (SEB vs ICA)
+3. Account name matching and cache logic
+4. API posting and error handling
+5. CLI argument handling and flag logic
+
+Use Hypothesis for all parsing and data transformation functions -- generate inputs
+rather than hand-picking them.
+
+Create a task file in `docs/tasks/` for each area of untested code before starting work.
+
+
 ## Architecture & Design Principles
 
+### SOLID
 - Follow **SOLID** principles and write clean, readable code
 - Prefer **composition over inheritance**
 - Keep functions and classes small with single responsibilities
