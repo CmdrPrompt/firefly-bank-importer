@@ -44,8 +44,13 @@ fix:
 	uv run pymarkdown --config .pymarkdown fix $(shell find . -name "*.md" -not -path "./.venv/*")
 
 ## Auto-fix and re-stage already-staged files (run before git commit)
-stage: fix
-	git diff --name-only --cached | xargs -r git add
+stage:
+	@STAGED=$$(git diff --name-only --cached); \
+	uv run ruff check --fix .; \
+	uv run ruff format .; \
+	uv run pymarkdown --config .pymarkdown fix $$(find . -name "*.md" -not -path "./.venv/*"); \
+	[ -n "$$STAGED" ] && echo "$$STAGED" | xargs git add -- || true; \
+	git update-index -q --refresh
 
 ## Run tests with coverage
 test:
