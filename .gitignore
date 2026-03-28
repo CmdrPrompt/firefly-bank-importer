@@ -1,6 +1,7 @@
 # Project specific ignores
 token
 accounts_cache.json
+.qodo/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
