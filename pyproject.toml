@@ -58,7 +58,13 @@ show_missing = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
+[tool.bandit]
+targets = ["src"]
+recursive = true
+skips = []
+
 [dependency-groups]
 dev = [
+    "bandit>=1.9.4",
     "pymarkdownlnt>=0.9.36",
 ]
