@@ -1,4 +1,4 @@
-.PHONY: all help setup install lint test clean
+.PHONY: all help setup install lint fix test clean
 
 all: help
 
@@ -12,7 +12,8 @@ help:
 	@echo "    make install  -- Create venv, install dependencies and activate pre-commit"
 	@echo ""
 	@echo "  Daily use:"
-	@echo "    make lint     -- Run ruff and mypy"
+	@echo "    make lint     -- Run ruff, mypy and pymarkdown"
+	@echo "    make fix      -- Auto-fix ruff and pymarkdown issues"
 	@echo "    make test     -- Run pytest with coverage"
 	@echo "    make clean    -- Remove venv and cache"
 	@echo ""
@@ -32,6 +33,13 @@ lint:
 	uv run ruff check .
 	uv run ruff format --check .
 	uv run mypy src/
+	uv run pymarkdown --config .pymarkdown scan $(shell find . -name "*.md" -not -path "./.venv/*")
+
+## Auto-fix ruff and pymarkdown issues
+fix:
+	uv run ruff check --fix .
+	uv run ruff format .
+	uv run pymarkdown --config .pymarkdown fix $(shell find . -name "*.md" -not -path "./.venv/*")
 
 ## Run tests with coverage
 test:
