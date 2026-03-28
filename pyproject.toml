@@ -22,6 +22,9 @@ dev = [
     "hypothesis",
     "coverage",
     "radon",
+    "fastapi",
+    "uvicorn",
+    "httpx",
 ]
 
 [build-system]
@@ -51,8 +54,11 @@ module = [
     "hypothesis.strategies",
     "fastapi",
     "fastapi.responses",
-    "fastapi.testclient",
+    "fastapi.*",
     "uvicorn",
+    "uvicorn.*",
+    "fastapi.testclient",
+    "fastapi.responses",
 ]
 ignore_missing_imports = true
 

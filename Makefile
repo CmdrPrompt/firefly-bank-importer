@@ -1,4 +1,4 @@
-.PHONY: all help setup install lint fix stage branch-task stage-task commit-task pr-task test clean
+.PHONY: all help setup install lint fix stage branch-task stage-task commit-task pr-task web test clean
 
 TASKS_DIR := docs/tasks
 
@@ -21,6 +21,7 @@ help:
 	@echo "    make stage-task  -- Auto-fix and stage files listed in task file: make stage-task f=TASK-001"
 	@echo "    make commit-task -- Commit using message from task file: make commit-task f=TASK-001"
 	@echo "    make pr-task     -- Switch to task branch and open GitHub PR: make pr-task f=TASK-001"
+	@echo "    make web         -- Start firefly-import-web on http://127.0.0.1:8000"
 	@echo "    make test        -- Run pytest with coverage"
 	@echo "    make clean       -- Remove venv and cache"
 	@echo ""
@@ -142,6 +143,10 @@ pr-task:
 	echo "Creating PR: $$TITLE"; \
 	gh pr create --title "$$TITLE" --body "$$BODY" --base main; \
 	git checkout main
+
+## Start web UI
+web:
+	uv run firefly-import-web
 
 ## Run tests with coverage
 test:
