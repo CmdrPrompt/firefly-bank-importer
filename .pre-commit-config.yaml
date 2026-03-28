@@ -11,4 +11,4 @@ repos:
     hooks:
       - id: mypy
         args: [--strict]
-        additional_dependencies: []  # add type stubs here if needed, e.g. types-requests
+        additional_dependencies: ["types-requests"]
