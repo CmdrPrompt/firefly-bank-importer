@@ -18,6 +18,9 @@ dev = [
     "hypothesis",
     "coverage",
     "radon",
+    "fastapi",
+    "uvicorn",
+    "httpx",
 ]
 
 [build-system]
@@ -44,8 +47,16 @@ module = [
     "pytest",
     "hypothesis",
     "hypothesis.strategies",
+    "fastapi",
+    "fastapi.responses",
+    "fastapi.testclient",
+    "uvicorn",
 ]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "firefly_bank_importer.web_ui"
+ignore_errors = true
 
 [tool.coverage.run]
 source = ["src"]
