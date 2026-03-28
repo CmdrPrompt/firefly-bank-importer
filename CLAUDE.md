@@ -51,11 +51,13 @@ Always follow the TDD cycle: **Red -> Green -> Refactor**
 ### Testing conventions
 
 - Use **pytest** as the default test runner
+- Use **Hypothesis** for property-based testing of parsing logic, date handling, and data transformations
 - Place tests in a `tests/` directory mirroring the `src/` structure
 - Name test files `test_<module>.py` and test functions `test_<behavior>`
 - Write tests at multiple levels: unit, integration
 - Aim for high coverage but prioritize meaningful tests over coverage numbers
 - Use fixtures and parametrize to avoid repetition
+- Use `@given` and `@settings` from Hypothesis for input fuzzing on parsing and validation logic
 - Mock external dependencies (APIs, file system, databases)
 
 ```
