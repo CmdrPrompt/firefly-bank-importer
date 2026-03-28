@@ -13,10 +13,12 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 - Provide clear logging to both terminal and log file.
 - Discover available destination asset accounts from Firefly instead of relying on a hardcoded list.
 - Cache discovered accounts locally so they can be reused in later runs.
+- Store Firefly URL and API token in local files so the user is only prompted once.
 
 ## 3. System Context
 - Input: CSV files in account folders.
-- Configuration: API token in the token file in the script working directory.
+- Configuration: Firefly URL in config.json in the project root.
+- Configuration: API token in secrets.json in the project root (token file supported as fallback).
 - Configuration: cached account list file generated from Firefly account discovery.
 - Target environment: Firefly III API.
 - Output: created transactions in Firefly III and a log file named import_YYYYMMDD_HHMMSS.log.
@@ -131,10 +133,22 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 5. The script logs names of created folders and total count.
 - Result: Import folders with consistent, filesystem-safe names exist for all accounts.
 
+### UC-12: Configure Firefly connection on first run
+- Actor: User
+- Trigger: config.json or secrets.json is missing, or the user provides the --configure flag.
+- Main flow:
+1. If the Firefly URL is missing, the script prompts the user to enter it interactively.
+2. The script validates the URL by calling /api/v1/about and reports the result.
+3. If validation succeeds, the script saves the URL to config.json.
+4. If the API token is missing, the script prompts the user to enter it interactively with hidden input.
+5. The script saves the token to secrets.json.
+6. The script continues with normal startup once both values are available.
+- Result: config.json and secrets.json are created and used on all subsequent runs without prompting.
+
 ## 5. Functional Requirements
 
 ### FR-1 Token loading
-The script shall read the API token from the token file in the working directory.
+The script shall read the API token from secrets.json in the project root. If secrets.json does not exist, the script shall fall back to the legacy token file. If neither exists, the script shall trigger the interactive configuration flow (UC-12).
 
 ### FR-2 CLI usage
 The script shall require at least one parameter (path). If missing, it shall print usage text and exit with an error code.
@@ -223,6 +237,15 @@ When account discovery runs (first run or --refresh-accounts), the script shall 
 ### FR-28 Folder name sanitization
 Derived folder names shall have Swedish characters (å, ä, ö) replaced with their ASCII equivalents (a, a, o), spaces replaced with underscores, and filesystem-invalid characters replaced with underscores.
 
+### FR-29 Firefly URL from configuration file
+The script shall read the Firefly base URL from config.json in the project root. If config.json does not exist or contains no URL, the script shall prompt the user interactively, validate the URL against the Firefly API, and save it to config.json.
+
+### FR-30 API token from secrets file
+The script shall read the API token from secrets.json in the project root. If secrets.json does not exist, the script shall fall back to the legacy token file. If neither exists, the script shall prompt the user interactively using hidden input and save the token to secrets.json.
+
+### FR-31 --configure flag
+The --configure flag shall force the interactive configuration flow for both URL and token, overwriting existing values in config.json and secrets.json.
+
 ## 6. Non-Functional Requirements
 
 ### NFR-1 Performance
@@ -296,12 +319,13 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | UC-9 | Reuse cached account list on later runs | Implemented |
 | UC-10 | Fallback when Firefly account discovery is unavailable | Implemented |
 | UC-11 | Automatic creation of import folders | Implemented |
+| UC-12 | Configure Firefly connection on first run | Not implemented |
 
 ### Functional Requirements
 
 | Requirement | Title | Status |
 |---|---|---|
-| FR-1 | Token loading | Implemented |
+| FR-1 | Token loading | Partial — reads from token file only, no secrets.json support yet |
 | FR-2 | CLI usage | Implemented |
 | FR-3 | Path execution mode | Implemented |
 | FR-4 | Account mapping via discovered/cached data | Implemented |
@@ -329,6 +353,9 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | FR-26 | Deterministic account resolution | Implemented |
 | FR-27 | Import folder creation | Implemented |
 | FR-28 | Folder name sanitization | Implemented |
+| FR-29 | Firefly URL from configuration file | Not implemented |
+| FR-30 | API token from secrets file | Not implemented |
+| FR-31 | --configure flag | Not implemented |
 
 ### Non-Functional Requirements
 
