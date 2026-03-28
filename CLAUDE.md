@@ -56,10 +56,13 @@ What needs to be done and why.
 ## Completion
 **Date:** YYYY-MM-DD
 **Summary:** What was done, any decisions made, and what was left out and why.
+**Files changed:**
+- `path/to/file` — created / modified
 ```
 
 When starting a task, update `Status` to `in-progress`. When done, update `Status` to
-`done` and fill in the `Completion` section with date and a brief summary before committing.
+`done` and fill in the `Completion` section with date, a brief summary, and a list of
+all files that were created or modified before committing.
 
 New tasks can be created by the user, by Claude Code, or by another LLM. Claude Code
 should check `docs/tasks/` for open tasks relevant to the current context before starting work.
