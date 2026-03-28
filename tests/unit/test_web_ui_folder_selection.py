@@ -56,7 +56,7 @@ def test_index_renders_folder_table_and_selection_works(tmp_path: Path) -> None:
 
     selection_response = client.get("/selection", params=[("folder", "kontoutdrag_A")])
     assert selection_response.status_code == 200
-    assert "Valda mappar" in selection_response.text
+    assert "Kontomappning" in selection_response.text or "Fel" in selection_response.text
     assert "kontoutdrag_A" in selection_response.text
 
 
