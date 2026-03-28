@@ -18,6 +18,7 @@ from firefly_bank_importer.import_firefly import process_folder
 
 ACCOUNT_MAP = {"SEB Lönekonto": 42}
 SEB_HEADERS = ["Bokföringsdatum", "Valutadatum", "Verifikationsnummer", "Text", "Belopp", "Saldo"]
+FIREFLY_URL = "http://test.local:30105"
 
 
 def write_seb_csv(path: Path, rows: list[list[str]]) -> None:
@@ -52,14 +53,14 @@ class TestNoMatchingAccount:
         folder.mkdir()
         session = make_session()
         with caplog.at_level(logging.WARNING):
-            process_folder(session, folder, ACCOUNT_MAP)
+            process_folder(session, folder, ACCOUNT_MAP, FIREFLY_URL)
         assert any("Inget konto hittat" in r.message for r in caplog.records)
 
     def test_no_post_when_no_account(self, tmp_path: Path) -> None:
         folder = tmp_path / "kontoutdrag_Okant"
         folder.mkdir()
         session = make_session()
-        process_folder(session, folder, ACCOUNT_MAP)
+        process_folder(session, folder, ACCOUNT_MAP, FIREFLY_URL)
         session.post.assert_not_called()
 
 
@@ -74,14 +75,14 @@ class TestNoCsvFiles:
         folder.mkdir()
         session = make_session()
         with caplog.at_level(logging.WARNING):
-            process_folder(session, folder, ACCOUNT_MAP)
+            process_folder(session, folder, ACCOUNT_MAP, FIREFLY_URL)
         assert any("Inga CSV-filer" in r.message for r in caplog.records)
 
     def test_no_post_when_no_csv(self, tmp_path: Path) -> None:
         folder = tmp_path / "kontoutdrag_SEB_Lonekonto"
         folder.mkdir()
         session = make_session()
-        process_folder(session, folder, ACCOUNT_MAP)
+        process_folder(session, folder, ACCOUNT_MAP, FIREFLY_URL)
         session.post.assert_not_called()
 
 
@@ -97,7 +98,7 @@ class TestIgnoreLatestDateCheck:
         write_seb_csv(folder / "2025-01.csv", [["2025-01-10", "2025-01-10", "V1", "X", "-10,00", "990,00"]])
         session = make_session()
         with patch.object(module, "get_latest_transaction_date") as mock_get:
-            process_folder(session, folder, ACCOUNT_MAP, ignore_latest_date_check=True)
+            process_folder(session, folder, ACCOUNT_MAP, FIREFLY_URL, ignore_latest_date_check=True)
             mock_get.assert_not_called()
 
     def test_logs_ignore_message(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
@@ -106,7 +107,7 @@ class TestIgnoreLatestDateCheck:
         write_seb_csv(folder / "2025-01.csv", [["2025-01-10", "2025-01-10", "V1", "X", "-10,00", "990,00"]])
         session = make_session()
         with caplog.at_level(logging.INFO):
-            process_folder(session, folder, ACCOUNT_MAP, ignore_latest_date_check=True)
+            process_folder(session, folder, ACCOUNT_MAP, FIREFLY_URL, ignore_latest_date_check=True)
         assert any("Ignorerar" in r.message for r in caplog.records)
 
 
@@ -129,7 +130,7 @@ class TestLatestDateFromApi:
         session = make_session()
         cutoff = date(2025, 1, 10)
         with patch.object(module, "get_latest_transaction_date", return_value=cutoff):
-            process_folder(session, folder, ACCOUNT_MAP, dry_run=True)
+            process_folder(session, folder, ACCOUNT_MAP, FIREFLY_URL, dry_run=True)
         # Only the row after cutoff should trigger a DRY RUN log — not tested in detail
         # here because process_csv is already covered separately. We just ensure no crash.
 
@@ -142,7 +143,7 @@ class TestLatestDateFromApi:
             patch.object(module, "get_latest_transaction_date", return_value=date(2025, 1, 5)),
             caplog.at_level(logging.INFO),
         ):
-            process_folder(session, folder, ACCOUNT_MAP)
+            process_folder(session, folder, ACCOUNT_MAP, FIREFLY_URL)
         assert not any("Ingen tidigare transaktion" in r.message for r in caplog.records)
 
 
@@ -161,7 +162,7 @@ class TestLatestDateNone:
             patch.object(module, "get_latest_transaction_date", return_value=None),
             caplog.at_level(logging.INFO),
         ):
-            process_folder(session, folder, ACCOUNT_MAP, dry_run=True)
+            process_folder(session, folder, ACCOUNT_MAP, FIREFLY_URL, dry_run=True)
         assert any("Ingen tidigare transaktion" in r.message for r in caplog.records)
 
 
@@ -178,6 +179,6 @@ class TestAutoSplitBeforeProcess:
         write_seb_csv(src, [["2025-02-15", "2025-02-15", "V1", "Shop", "-50,00", "950,00"]])
         session = make_session()
         with patch.object(module, "get_latest_transaction_date", return_value=None):
-            process_folder(session, folder, ACCOUNT_MAP, dry_run=True)
+            process_folder(session, folder, ACCOUNT_MAP, FIREFLY_URL, dry_run=True)
         assert not src.exists()
         assert (folder / "2025-02.csv").exists()

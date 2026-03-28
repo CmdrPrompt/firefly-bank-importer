@@ -17,6 +17,7 @@ ACCOUNTS: list[Account] = [
     {"id": 1, "name": "Lönekonto", "type": "asset"},
     {"id": 2, "name": "Sparkonto", "type": "asset"},
 ]
+FIREFLY_URL = "http://test.local:30105"
 
 
 def make_session() -> MagicMock:
@@ -34,7 +35,7 @@ class TestCacheHit:
             patch.object(module, "load_account_cache", return_value=ACCOUNTS),
             patch.object(module, "fetch_accounts_from_firefly") as mock_fetch,
         ):
-            account_map, accounts = build_account_map(make_session(), refresh=False)
+            account_map, accounts = build_account_map(make_session(), FIREFLY_URL, refresh=False)
             mock_fetch.assert_not_called()
         assert account_map == {"Lönekonto": 1, "Sparkonto": 2}
         assert accounts == ACCOUNTS
@@ -45,7 +46,7 @@ class TestCacheHit:
             patch.object(module, "fetch_accounts_from_firefly") as mock_fetch,
             patch.object(module, "save_account_cache") as mock_save,
         ):
-            build_account_map(make_session(), refresh=False)
+            build_account_map(make_session(), FIREFLY_URL, refresh=False)
             mock_fetch.assert_not_called()
             mock_save.assert_not_called()
 
@@ -62,7 +63,7 @@ class TestRefreshTrue:
             patch.object(module, "fetch_accounts_from_firefly", return_value=ACCOUNTS) as mock_fetch,
             patch.object(module, "save_account_cache"),
         ):
-            build_account_map(make_session(), refresh=True)
+            build_account_map(make_session(), FIREFLY_URL, refresh=True)
             mock_load.assert_not_called()
             mock_fetch.assert_called_once()
 
@@ -72,7 +73,7 @@ class TestRefreshTrue:
             patch.object(module, "fetch_accounts_from_firefly", return_value=ACCOUNTS),
             patch.object(module, "save_account_cache") as mock_save,
         ):
-            build_account_map(make_session(), refresh=True)
+            build_account_map(make_session(), FIREFLY_URL, refresh=True)
             mock_save.assert_called_once_with(ACCOUNTS)
 
     def test_returns_correct_map_after_fetch(self) -> None:
@@ -81,7 +82,7 @@ class TestRefreshTrue:
             patch.object(module, "fetch_accounts_from_firefly", return_value=ACCOUNTS),
             patch.object(module, "save_account_cache"),
         ):
-            account_map, _ = build_account_map(make_session(), refresh=True)
+            account_map, _ = build_account_map(make_session(), FIREFLY_URL, refresh=True)
         assert account_map == {"Lönekonto": 1, "Sparkonto": 2}
 
 
@@ -97,7 +98,7 @@ class TestCacheMissFetchSuccess:
             patch.object(module, "fetch_accounts_from_firefly", return_value=ACCOUNTS),
             patch.object(module, "save_account_cache") as mock_save,
         ):
-            account_map, accounts = build_account_map(make_session(), refresh=False)
+            account_map, accounts = build_account_map(make_session(), FIREFLY_URL, refresh=False)
             mock_save.assert_called_once_with(ACCOUNTS)
         assert account_map == {"Lönekonto": 1, "Sparkonto": 2}
 
@@ -123,7 +124,7 @@ class TestCacheMissFetchFailFallback:
             patch.object(module, "save_account_cache"),
             caplog.at_level(logging.ERROR),
         ):
-            account_map, accounts = build_account_map(make_session(), refresh=False)
+            account_map, accounts = build_account_map(make_session(), FIREFLY_URL, refresh=False)
 
         assert accounts == ACCOUNTS
         assert account_map == {"Lönekonto": 1, "Sparkonto": 2}
@@ -142,7 +143,7 @@ class TestCacheMissFetchFailNoFallback:
             patch.object(module, "save_account_cache"),
             pytest.raises(SystemExit) as exc_info,
         ):
-            build_account_map(make_session(), refresh=False)
+            build_account_map(make_session(), FIREFLY_URL, refresh=False)
         assert exc_info.value.code == 1
 
 
@@ -159,5 +160,5 @@ class TestRefreshFetchFailNoCache:
             patch.object(module, "save_account_cache"),
             pytest.raises(SystemExit) as exc_info,
         ):
-            build_account_map(make_session(), refresh=True)
+            build_account_map(make_session(), FIREFLY_URL, refresh=True)
         assert exc_info.value.code == 1
