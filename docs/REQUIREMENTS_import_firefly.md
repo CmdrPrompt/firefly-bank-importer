@@ -201,6 +201,17 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 4. The system deletes selected logs and reports how many files were removed.
 - Result: Log directory can be cleaned without manual file-system operations.
 
+### UC-22: Upload CSV files in web UI
+- Actor: User
+- Preconditions: The web UI is running and at least one import folder exists.
+- Trigger: The user uploads one or more CSV files via the web UI.
+- Main flow:
+1. The user selects target import folder and one or more CSV files.
+2. The system validates file type and supported bank format via CSV headers.
+3. The system stores valid files in the selected import folder.
+4. The system reports per-file result (saved/rejected) with reason.
+- Result: Valid CSV files are placed in import folders without manual filesystem operations.
+
 ## 5. Functional Requirements
 
 ### FR-1 Token loading
@@ -341,6 +352,15 @@ The system shall provide progress updates for running live-import jobs, includin
 ### FR-43 Web UI live import completion summary
 When a live-import job completes, the system shall expose a completion summary containing imported, skipped, and failed totals and any terminal errors.
 
+### FR-44 Web UI upload endpoint
+The system shall provide a web API endpoint that accepts CSV file uploads and a target import folder.
+
+### FR-45 Web UI upload validation
+The upload flow shall validate that uploaded files are CSV and that headers match a supported bank format before saving files.
+
+### FR-46 Web UI upload result feedback
+The upload flow shall return user-visible per-file feedback containing filename, save status, and rejection reason when validation fails.
+
 ## 6. Non-Functional Requirements
 
 ### NFR-1 Performance
@@ -423,6 +443,7 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | UC-14 | Add a new bank export format without changing the core importer | Implemented |
 | UC-18 | Preview dry-run import in web UI | Not implemented |
 | UC-19 | Run live import with progress in web UI | Not implemented |
+| UC-22 | Upload CSV files in web UI | Not implemented |
 | UC-23 | Clear old import logs | Not implemented |
 
 ### Functional Requirements
@@ -472,6 +493,9 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | FR-41 | Web UI live import job start | Not implemented |
 | FR-42 | Web UI live progress stream | Not implemented |
 | FR-43 | Web UI live import completion summary | Not implemented |
+| FR-44 | Web UI upload endpoint | Not implemented |
+| FR-45 | Web UI upload validation | Not implemented |
+| FR-46 | Web UI upload result feedback | Not implemented |
 
 ### Non-Functional Requirements
 

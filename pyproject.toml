@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.116.1",
     "httpx>=0.28.1",
+    "python-multipart>=0.0.9",
     "requests>=2.31",
     "uvicorn>=0.35.0",
 ]
@@ -52,10 +53,12 @@ module = [
     "hypothesis",
     "hypothesis.strategies",
     "fastapi",
+    "fastapi.responses",
     "fastapi.*",
     "uvicorn",
     "uvicorn.*",
     "fastapi.testclient",
+    "fastapi.responses",
 ]
 ignore_missing_imports = true
 
