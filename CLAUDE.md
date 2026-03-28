@@ -18,6 +18,19 @@ Key capabilities:
 Before writing any code, read the requirements specification in `docs/REQUIREMENTS_import_firefly.md`. Use it as the
 primary source of truth for what is being built, expected behavior, and scope.
 
+## Spec-Driven Development
+
+All changes and additions to the application must be grounded in the requirements specification.
+
+**Before writing any code for a new feature or change:**
+
+1. Update `docs/REQUIREMENTS_import_firefly.md` with the relevant requirement(s) and use case(s)
+2. Present the updated requirement and use case to the user and ask: "Is this what you intended?"
+3. Wait for explicit confirmation before proceeding to write any code
+4. Only then follow the TDD cycle to implement the confirmed requirement
+
+If a proposed change cannot be clearly expressed as a requirement and use case, it should not be implemented.
+
 ## Architecture & Design Principles
 
 - Follow **SOLID** principles and write clean, readable code
@@ -150,7 +163,7 @@ repos:
         args: [--fix]
       - id: ruff-format
 
-  - repo: https://github.com/pre-commit-ci/mirrors-mypy
+  - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.10.0
     hooks:
       - id: mypy
@@ -188,6 +201,7 @@ Or via Makefile: `make lint && make test`
 
 - Do not write code before reading `docs/`
 - Do not skip writing tests first (TDD)
+- Do not write code before updating and confirming the requirements specification
 - Do not commit code that fails ruff, mypy, or pytest
 - Do not add dependencies not covered by requirements
 - Do not suppress type errors with `# type: ignore` without explanation
