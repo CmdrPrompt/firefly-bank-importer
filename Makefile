@@ -1,4 +1,4 @@
-.PHONY: all help setup install lint fix test clean
+.PHONY: all help setup install lint fix stage test clean
 
 all: help
 
@@ -14,6 +14,7 @@ help:
 	@echo "  Daily use:"
 	@echo "    make lint     -- Run ruff, mypy, pymarkdown and radon (cognitive complexity)"
 	@echo "    make fix      -- Auto-fix ruff and pymarkdown issues"
+	@echo "    make stage    -- Auto-fix and re-stage all tracked changes (run before git commit)"
 	@echo "    make test     -- Run pytest with coverage"
 	@echo "    make clean    -- Remove venv and cache"
 	@echo ""
@@ -41,6 +42,10 @@ fix:
 	uv run ruff check --fix .
 	uv run ruff format .
 	uv run pymarkdown --config .pymarkdown fix $(shell find . -name "*.md" -not -path "./.venv/*")
+
+## Auto-fix and re-stage all tracked changes (run before git commit)
+stage: fix
+	git add -u
 
 ## Run tests with coverage
 test:
