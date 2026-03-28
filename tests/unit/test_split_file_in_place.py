@@ -7,7 +7,11 @@ to avoid touching the actual bankImports directory.
 import csv
 from pathlib import Path
 
+import pytest
+
+import firefly_bank_importer.bank_formats as bank_formats
 from firefly_bank_importer.import_firefly import split_file_in_place
+from tests.unit.dummy_bank_format import DUMMY_FORMAT, DUMMY_HEADERS
 
 SEB_HEADERS = ["Bokföringsdatum", "Valutadatum", "Verifikationsnummer", "Text", "Belopp", "Saldo"]
 ICA_HEADERS = ["Datum", "Text", "Typ", "Belopp"]
@@ -26,6 +30,15 @@ def read_csv(path: Path) -> tuple[list[str], list[list[str]]]:
         headers = next(reader)
         rows = list(reader)
     return headers, rows
+
+
+@pytest.fixture()
+def register_dummy_bank_format(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        bank_formats,
+        "_REGISTERED_BANK_FORMATS",
+        bank_formats.get_registered_bank_formats() + (DUMMY_FORMAT,),
+    )
 
 
 class TestSebMultiMonth:
@@ -223,3 +236,26 @@ class TestUnknownFormat:
         )
         split_file_in_place(src)
         assert src.exists()
+
+
+class TestExtensibilityWithRegisteredDummyBank:
+    def test_dummy_bank_format_works_through_split_file_in_place(
+        self,
+        tmp_path: Path,
+        register_dummy_bank_format: None,
+    ) -> None:
+        src = tmp_path / "export.csv"
+        write_csv(
+            src,
+            DUMMY_HEADERS,
+            [
+                ["2025-08-15", "Salary", "Income", "15 000,50", "20 500,50"],
+                ["2025-08-01", "Rent", "Bill", "-7 000,00", "5 500,50"],
+            ],
+        )
+        split_file_in_place(src)
+        headers, rows = read_csv(tmp_path / "2025-08.csv")
+        assert headers == DUMMY_HEADERS
+        assert rows[0][0] == "2025-08-01"
+        assert rows[0][3] == "-7000.00"
+        assert rows[1][4] == "20500.50"
