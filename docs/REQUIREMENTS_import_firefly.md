@@ -169,6 +169,16 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 4. The core importer discovers and uses the package during normal processing.
 - Result: New bank formats can be added by extension rather than by editing core CSV detection logic.
 
+### UC-23: Clear old import logs
+- Actor: User
+- Trigger: The user chooses to clear logs from CLI or web UI.
+- Main flow:
+1. The system lists existing import log files.
+2. The user chooses clear scope (all logs or logs older than N days).
+3. The system asks for confirmation before deletion.
+4. The system deletes selected logs and reports how many files were removed.
+- Result: Log directory can be cleaned without manual file-system operations.
+
 ## 5. Functional Requirements
 
 ### FR-1 Token loading
@@ -285,6 +295,12 @@ The core importer shall consume bank format packages through a shared contract/i
 ### FR-36 Unsupported format handling in package architecture
 If no bank format package matches a CSV header, the script shall log an unknown-format error and skip the file.
 
+### FR-37 Log cleanup command
+The system shall provide a log-cleanup operation that supports:
+- deleting all import log files, or
+- deleting import log files older than a user-provided retention period in days,
+with explicit confirmation before destructive action.
+
 ## 6. Non-Functional Requirements
 
 ### NFR-1 Performance
@@ -341,6 +357,7 @@ Adding support for a new bank export format should require adding or registering
 - If discovery fails and no cache exists, the script exits with an actionable message.
 - Running with --refresh-accounts creates import folders for all discovered accounts.
 - Created folder names contain no spaces or Swedish characters.
+- The system can clear old log files using explicit user confirmation.
 
 ## 10. Implementation Status
 
@@ -364,6 +381,7 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | UC-12 | Configure Firefly connection on first run | Not implemented |
 | UC-13 | Resolve a bank export format through a format package | Implemented |
 | UC-14 | Add a new bank export format without changing the core importer | Implemented |
+| UC-23 | Clear old import logs | Not implemented |
 
 ### Functional Requirements
 
@@ -405,6 +423,7 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | FR-34 | Normalized field mapping | Implemented |
 | FR-35 | Shared importer contract for bank formats | Implemented |
 | FR-36 | Unsupported format handling in package architecture | Implemented |
+| FR-37 | Log cleanup command | Not implemented |
 
 ### Non-Functional Requirements
 
