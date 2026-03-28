@@ -52,3 +52,16 @@ testpaths = ["tests"]
 dev = [
     "pymarkdownlnt>=0.9.36",
 ]
+
+[tool.mypy]
+strict = true
+python_version = "3.11"
+mypy_path = "src"
+
+[[tool.mypy.overrides]]
+module = [
+    "pytest",
+    "hypothesis",
+    "hypothesis.strategies",
+]
+ignore_missing_imports = true
