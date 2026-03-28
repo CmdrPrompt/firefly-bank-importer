@@ -140,7 +140,8 @@ pr-task:
 	BODY=$$(awk '/^## Description/{found=1} /^## Completion/{found=0} found{print}' "$$TASK_FILE"); \
 	[ -n "$$TITLE" ] || (echo "Could not extract title from $$TASK_FILE"; exit 1); \
 	echo "Creating PR: $$TITLE"; \
-	gh pr create --title "$$TITLE" --body "$$BODY" --base main
+	gh pr create --title "$$TITLE" --body "$$BODY" --base main; \
+	git checkout main
 
 ## Run tests with coverage
 test:
