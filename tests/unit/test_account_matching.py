@@ -1,9 +1,10 @@
 """Characterisation tests for sanitize_folder_name() and find_account_id()."""
 
 import pytest
-from firefly_bank_importer.import_firefly import find_account_id, sanitize_folder_name
 from hypothesis import given, settings
 from hypothesis import strategies as st
+
+from firefly_bank_importer.import_firefly import find_account_id, sanitize_folder_name
 
 RESERVED_CHARS = ["<", ">", ":", '"', "/", "\\", "|", "?", "*"]
 SWEDISH_LETTERS = set("åäöÅÄÖ")
