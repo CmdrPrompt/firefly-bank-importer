@@ -12,7 +12,7 @@ help:
 	@echo "    make install  -- Create venv, install dependencies and activate pre-commit"
 	@echo ""
 	@echo "  Daily use:"
-	@echo "    make lint     -- Run ruff, mypy and pymarkdown"
+	@echo "    make lint     -- Run ruff, mypy, pymarkdown and radon (cognitive complexity)"
 	@echo "    make fix      -- Auto-fix ruff and pymarkdown issues"
 	@echo "    make test     -- Run pytest with coverage"
 	@echo "    make clean    -- Remove venv and cache"
@@ -34,6 +34,7 @@ lint:
 	uv run ruff format --check .
 	uv run mypy src/
 	uv run pymarkdown --config .pymarkdown scan $(shell find . -name "*.md" -not -path "./.venv/*")
+	uv run radon cc src/ --min C --show-complexity
 
 ## Auto-fix ruff and pymarkdown issues
 fix:
