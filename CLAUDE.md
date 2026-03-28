@@ -7,6 +7,7 @@ CSV exports (SEB and ICA formats) into a [Firefly III](https://www.firefly-iii.o
 instance via its REST API.
 
 Key capabilities:
+
 - Imports transactions from one or more account folders using the API token in `token`.
 - Detects and splits multi-month CSV exports into monthly `YYYY-MM.csv` files before import.
 - Discovers asset accounts from Firefly and caches them locally in `accounts_cache.json`.
@@ -75,6 +76,7 @@ follow this workflow rather than the standard TDD cycle:
 5. **Replace** characterisation tests with proper requirement-driven tests during refactoring
 
 **Prioritisation order** for adding tests (highest risk first):
+
 1. Date parsing and duplicate-detection logic
 2. CSV parsing and format detection (SEB vs ICA)
 3. Account name matching and cache logic
@@ -86,10 +88,10 @@ rather than hand-picking them.
 
 Create a task file in `docs/tasks/` for each area of untested code before starting work.
 
-
 ## Architecture & Design Principles
 
 ### SOLID
+
 - Follow **SOLID** principles and write clean, readable code
 - Prefer **composition over inheritance**
 - Keep functions and classes small with single responsibilities
@@ -117,7 +119,7 @@ Always follow the TDD cycle: **Red -> Green -> Refactor**
 - Use `@given` and `@settings` from Hypothesis for input fuzzing on parsing and validation logic
 - Mock external dependencies (APIs, file system, databases)
 
-```
+```text
 tests/
   unit/
     test_<module>.py
@@ -127,7 +129,7 @@ tests/
 
 ## Project Structure
 
-```
+```text
 firefly-bank-importer/
   src/
     firefly_bank_importer/
