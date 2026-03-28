@@ -58,6 +58,8 @@ What needs to be done and why.
 **Summary:** What was done, any decisions made, and what was left out and why.
 **Files changed:**
 - `path/to/file` — created / modified
+**Stage:** `git add path/to/file1 path/to/file2`
+**Commit:** `git commit -m "Short imperative summary of what was done"`
 ```
 
 When starting a task, update `Status` to `in-progress`. When done, update `Status` to
