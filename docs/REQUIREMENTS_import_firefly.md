@@ -169,6 +169,38 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 4. The core importer discovers and uses the package during normal processing.
 - Result: New bank formats can be added by extension rather than by editing core CSV detection logic.
 
+### UC-18: Preview dry-run import in web UI
+- Actor: User
+- Preconditions: One or more import folders are selected and mapped to Firefly accounts in the web UI.
+- Trigger: The user requests a dry-run preview before live import.
+- Main flow:
+1. The web UI validates that each selected folder has a resolved destination account.
+2. The system parses files in selected folders using the existing format resolution and duplicate-date rules.
+3. The system computes a preview summary per folder and total, including candidate transactions, skipped duplicates, date range, and parsing warnings/errors.
+4. The web UI shows the summary and blocks live import when unresolved errors exist.
+- Result: The user can verify what would be imported before executing live import.
+
+### UC-19: Run live import with progress in web UI
+- Actor: User
+- Preconditions: Dry-run preview is completed and contains no blocking errors.
+- Trigger: The user starts live import from the web UI.
+- Main flow:
+1. The web UI starts an asynchronous live-import job for selected folders and mappings.
+2. The backend processes files and transactions while emitting incremental progress updates.
+3. The web UI receives and renders progress updates in near real time.
+4. When the job finishes, the web UI shows a completion summary with imported, skipped, and failed counts.
+- Result: The user can monitor live import execution and outcome without terminal access.
+
+### UC-23: Clear old import logs
+- Actor: User
+- Trigger: The user chooses to clear logs from CLI or web UI.
+- Main flow:
+1. The system lists existing import log files.
+2. The user chooses clear scope (all logs or logs older than N days).
+3. The system asks for confirmation before deletion.
+4. The system deletes selected logs and reports how many files were removed.
+- Result: Log directory can be cleaned without manual file-system operations.
+
 ### UC-22: Upload CSV files in web UI
 - Actor: User
 - Preconditions: The web UI is running and at least one import folder exists.
@@ -296,6 +328,30 @@ The core importer shall consume bank format packages through a shared contract/i
 ### FR-36 Unsupported format handling in package architecture
 If no bank format package matches a CSV header, the script shall log an unknown-format error and skip the file.
 
+### FR-37 Log cleanup command
+The system shall provide a log-cleanup operation that supports:
+- deleting all import log files, or
+- deleting import log files older than a user-provided retention period in days,
+with explicit confirmation before destructive action.
+
+### FR-38 Web UI dry-run preview API
+The system shall provide a web API endpoint that returns a dry-run preview summary for selected folders and account mappings without creating transactions in Firefly.
+
+### FR-39 Web UI preview content
+The dry-run preview response and UI shall include, at minimum, per-folder and total counts for candidate transactions, duplicate-skipped rows, date range, and parsing/validation warnings.
+
+### FR-40 Live-import guard from preview
+The web UI shall prevent continuing to live import when dry-run preview reports unresolved mapping errors or fatal parsing/validation errors.
+
+### FR-41 Web UI live import job start
+The system shall provide an API endpoint that starts a live-import job asynchronously for selected folders and resolved account mappings.
+
+### FR-42 Web UI live progress stream
+The system shall provide progress updates for running live-import jobs, including job state, current folder/file context, and cumulative imported/skipped/failed counts.
+
+### FR-43 Web UI live import completion summary
+When a live-import job completes, the system shall expose a completion summary containing imported, skipped, and failed totals and any terminal errors.
+
 ### FR-44 Web UI upload endpoint
 The system shall provide a web API endpoint that accepts CSV file uploads and a target import folder.
 
@@ -361,6 +417,7 @@ Adding support for a new bank export format should require adding or registering
 - If discovery fails and no cache exists, the script exits with an actionable message.
 - Running with --refresh-accounts creates import folders for all discovered accounts.
 - Created folder names contain no spaces or Swedish characters.
+- The system can clear old log files using explicit user confirmation.
 
 ## 10. Implementation Status
 
@@ -384,7 +441,10 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | UC-12 | Configure Firefly connection on first run | Not implemented |
 | UC-13 | Resolve a bank export format through a format package | Implemented |
 | UC-14 | Add a new bank export format without changing the core importer | Implemented |
+| UC-18 | Preview dry-run import in web UI | Not implemented |
+| UC-19 | Run live import with progress in web UI | Not implemented |
 | UC-22 | Upload CSV files in web UI | Not implemented |
+| UC-23 | Clear old import logs | Not implemented |
 
 ### Functional Requirements
 
@@ -426,6 +486,13 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | FR-34 | Normalized field mapping | Implemented |
 | FR-35 | Shared importer contract for bank formats | Implemented |
 | FR-36 | Unsupported format handling in package architecture | Implemented |
+| FR-37 | Log cleanup command | Not implemented |
+| FR-38 | Web UI dry-run preview API | Not implemented |
+| FR-39 | Web UI preview content | Not implemented |
+| FR-40 | Live-import guard from preview | Not implemented |
+| FR-41 | Web UI live import job start | Not implemented |
+| FR-42 | Web UI live progress stream | Not implemented |
+| FR-43 | Web UI live import completion summary | Not implemented |
 | FR-44 | Web UI upload endpoint | Not implemented |
 | FR-45 | Web UI upload validation | Not implemented |
 | FR-46 | Web UI upload result feedback | Not implemented |
