@@ -5,15 +5,21 @@ from dataclasses import dataclass
 from datetime import datetime
 from html import escape
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 
 from firefly_bank_importer.bank_formats import resolve_bank_format
+from firefly_bank_importer.import_firefly import find_account_id, load_account_cache, sanitize_folder_name
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_IMPORT_BASE = _PROJECT_ROOT / "bankImports"
+
+
+class AccountCandidate(TypedDict):
+    id: int
+    name: str
 
 
 @dataclass
@@ -162,13 +168,91 @@ def create_app(base_folder: Path | None = None) -> FastAPI:
     @app.get("/selection", response_class=HTMLResponse)
     def selection(request: Request) -> str:
         selected = request.query_params.getlist("folder")
-        items = "".join(f"<li>{escape(folder)}</li>" for folder in selected)
+
+        accounts = load_account_cache()
+        if not accounts:
+            return (
+                "<html><head><meta charset='utf-8'><title>Valda mappar</title></head><body>"
+                "<h1>Fel</h1>"
+                "<p>Kontocache hittades inte. Läs in eller uppdatera konton först.</p>"
+                "<p><a href='/'>Tillbaka</a></p>"
+                "</body></html>"
+            )
+
+        account_map = {a["name"]: a["id"] for a in accounts}
+
+        # Build account candidates for each selected folder
+        account_rows = []
+        all_resolved = True
+        for folder in selected:
+            best_match_id = find_account_id(folder, account_map)
+            candidates: list[AccountCandidate] = []
+
+            # Get all possible candidates using same logic as find_account
+            folder_key = folder
+            if folder_key.startswith("kontoutdrag_"):
+                folder_key = folder_key[len("kontoutdrag_") :]
+            folder_lower = sanitize_folder_name(folder_key).lower()
+
+            for account_name, account_id in account_map.items():
+                account_lower = sanitize_folder_name(account_name).lower()
+                if account_lower in folder_lower or folder_lower in account_lower:
+                    candidates.append({"id": account_id, "name": account_name})
+
+            if best_match_id is None:
+                all_resolved = False
+
+            selected_id = best_match_id or (candidates[0]["id"] if candidates else None)
+
+            # Build dropdown options
+            options = "".join(
+                f'<option value="{c["id"]}" {"selected" if c["id"] == selected_id else ""}>{escape(c["name"])}</option>'
+                for c in candidates
+            )
+
+            status_class = "resolved" if best_match_id is not None else "unresolved"
+            status_text = "✓ Matchad" if best_match_id is not None else "⚠ Ej matchad"
+
+            account_rows.append(
+                f"<tr class='{status_class}'>"
+                f"<td>{escape(folder)}</td>"
+                f"<td>{status_text}</td>"
+                f"<td><select name='{escape(folder)}'>{options}</select></td>"
+                f"</tr>"
+            )
+
+        accounts_html = "".join(account_rows)
+        disabled_msg = (
+            "<p><button type='submit' name='action' value='select' disabled>"
+            "Alla mappar måste mappas innan fortsättning</button></p>"
+            "<p style='color:red;'>Obs: Alla mappar måste ha en vald "
+            "Firefly-konto.<br/>"
+        )
+        button_html = (
+            ("<p><button type='submit' name='action' value='select'>Fortsätt med denna mappning</button></p>")
+            if all_resolved
+            else (disabled_msg + "Se över automatisk matchning och gör handvalda" + " korrigeringar om behövligt.</p>")
+        )
+
         return (
-            "<html><head><meta charset='utf-8'><title>Valda mappar</title></head><body>"
-            "<h1>Valda mappar</h1>"
-            f"<ul>{items or '<li>Inga mappar valda</li>'}</ul>"
-            "<p>Nästa steg blir kontomatchning (UC-17).</p>"
+            "<html><head><meta charset='utf-8'><title>Kontomappning</title>"
+            "<style>"
+            "table { border-collapse: collapse; width: 100%; }"
+            "th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }"
+            "th { background-color: #f0f0f0; }"
+            ".resolved { background-color: #e8f5e9; }"
+            ".unresolved { background-color: #ffebee; }"
+            "</style>"
+            "</head><body>"
+            "<h1>Kontomappning</h1>"
+            "<p>Välj Firefly-konto för varje importmapp:</p>"
+            "<form method='post' action='/account-mapping'>"
+            "<table><thead><tr><th>Mapp</th><th>Status</th><th>Firefly-konto</th></tr></thead>"
+            f"<tbody>{accounts_html}</tbody>"
+            "</table>"
+            f"{button_html}"
             "<p><a href='/'>Tillbaka</a></p>"
+            "</form>"
             "</body></html>"
         )
 
@@ -197,6 +281,36 @@ def create_app(base_folder: Path | None = None) -> FastAPI:
                 }
                 for preview in previews
             ],
+        }
+
+    @app.get("/api/account-candidates")
+    def api_account_candidates(folder: str) -> dict[str, Any]:
+        """Get account candidates for a given folder."""
+        accounts = load_account_cache()
+        if not accounts:
+            return {"folder": folder, "candidates": [], "error": "Ingen kontocache tillgänglig"}
+
+        account_map = {a["name"]: a["id"] for a in accounts}
+
+        # Get best match
+        best_match_id = find_account_id(folder, account_map)
+
+        # Get all candidates using same logic as find_account_id
+        candidates: list[AccountCandidate] = []
+        folder_key = folder
+        if folder_key.startswith("kontoutdrag_"):
+            folder_key = folder_key[len("kontoutdrag_") :]
+        folder_lower = sanitize_folder_name(folder_key).lower()
+
+        for account_name, account_id in account_map.items():
+            account_lower = sanitize_folder_name(account_name).lower()
+            if account_lower in folder_lower or folder_lower in account_lower:
+                candidates.append({"id": account_id, "name": account_name})
+
+        return {
+            "folder": folder,
+            "best_match": best_match_id,
+            "candidates": candidates,
         }
 
     return app

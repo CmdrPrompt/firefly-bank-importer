@@ -16,12 +16,14 @@ dev = [
     "ruff",
     "mypy",
     "types-requests",
-    "httpx",
     "pytest",
     "pytest-cov",
     "hypothesis",
     "coverage",
     "radon",
+    "fastapi",
+    "uvicorn",
+    "httpx",
 ]
 
 [build-system]
@@ -53,6 +55,7 @@ module = [
     "fastapi.*",
     "uvicorn",
     "uvicorn.*",
+    "fastapi.testclient",
 ]
 ignore_missing_imports = true
 
