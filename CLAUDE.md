@@ -48,6 +48,13 @@ commit task-start changes on `main`.
 3. Set task `Status` to `in-progress` on that task branch.
 4. Commit both task metadata updates and implementation work on the task branch.
 
+**Multi-task initiative workflow (when several tasks are planned at once):**
+
+1. Create all planned task files in `docs/tasks/` first.
+2. For each task file, create/switch its dedicated branch before writing implementation code.
+3. Start implementation only after task branches have been initialized.
+4. Implement one task at a time on its own branch; do not mix implementation across task branches.
+
 Use `make branch-task f=<TASK-ID>` to create/switch branch from task metadata.
 
 **Branch naming:** `task/<NNN>-short-description`
