@@ -4,7 +4,10 @@ version = "0.1.2"
 description = ""
 requires-python = ">=3.11"
 dependencies = [
+    "fastapi>=0.116.1",
+    "httpx>=0.28.1",
     "requests>=2.31",
+    "uvicorn>=0.35.0",
 ]
 
 [project.optional-dependencies]
@@ -29,6 +32,7 @@ build-backend = "hatchling.build"
 
 [project.scripts]
 firefly-import = "firefly_bank_importer.import_firefly:main"
+firefly-import-web = "firefly_bank_importer.web_ui:main"
 
 [tool.ruff]
 line-length = 120
@@ -48,15 +52,16 @@ module = [
     "hypothesis",
     "hypothesis.strategies",
     "fastapi",
-    "fastapi.responses",
-    "fastapi.testclient",
+    "fastapi.*",
     "uvicorn",
+    "uvicorn.*",
+    "fastapi.testclient",
 ]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = "firefly_bank_importer.web_ui"
-ignore_errors = true
+module = ["firefly_bank_importer.web_ui"]
+disable_error_code = ["misc"]
 
 [tool.coverage.run]
 source = ["src"]
