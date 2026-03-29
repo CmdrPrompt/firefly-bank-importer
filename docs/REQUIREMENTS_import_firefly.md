@@ -201,6 +201,15 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 4. The system deletes selected logs and reports how many files were removed.
 - Result: Log directory can be cleaned without manual file-system operations.
 
+### UC-24: Reduce cognitive complexity in flagged functions
+- Actor: Developer
+- Trigger: Linting fails due to Complexipy cognitive-complexity violations.
+- Main flow:
+1. The developer runs linting and reviews Complexipy failed functions in descending severity.
+2. The developer refactors flagged functions into smaller units while preserving behavior.
+3. The developer validates the refactor with lint and tests.
+- Result: The codebase remains behaviorally stable while meeting complexity gates.
+
 ### UC-15: Configure Firefly URL and token in web UI settings
 - Actor: User
 - Preconditions: The web UI is running and the settings page is accessible.
@@ -388,6 +397,9 @@ If URL validation fails in the settings save flow, the system shall not modify c
 ### FR-50 Web UI settings update
 The settings save flow shall support both first-time setup and updates to existing values; existing URL and token shall be replaced on successful validation.
 
+### FR-51 Cognitive complexity lint gate
+All functions under src/ shall satisfy the repository's Complexipy cognitive-complexity threshold enforced by make lint.
+
 ## 6. Non-Functional Requirements
 
 ### NFR-1 Performance
@@ -416,6 +428,9 @@ The script shall log whether account data came from live discovery or cache, inc
 
 ### NFR-9 Extensibility of bank formats
 Adding support for a new bank export format should require adding or registering a new format package with minimal or no changes to the core importer workflow.
+
+### NFR-10 Maintainability via bounded complexity
+The project shall keep function-level cognitive complexity bounded to preserve readability, ease of review, and safer incremental changes.
 
 ## 7. Constraints and Assumptions
 - CSV dates are assumed to be in YYYY-MM-DD format.
@@ -472,6 +487,7 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | UC-19 | Run live import with progress in web UI | Not implemented |
 | UC-22 | Upload CSV files in web UI | Not implemented |
 | UC-23 | Clear old import logs | Not implemented |
+| UC-24 | Reduce cognitive complexity in flagged functions | Implemented |
 
 ### Functional Requirements
 
@@ -523,6 +539,7 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | FR-44 | Web UI upload endpoint | Not implemented |
 | FR-45 | Web UI upload validation | Not implemented |
 | FR-46 | Web UI upload result feedback | Not implemented |
+| FR-51 | Cognitive complexity lint gate | Implemented |
 
 ### Non-Functional Requirements
 
@@ -537,3 +554,4 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | NFR-7 | Cache reliability | Partial — cache is written atomically by Path.write_text but no temp-file swap is used |
 | NFR-8 | Observability for discovery and cache | Implemented |
 | NFR-9 | Extensibility of bank formats | Implemented |
+| NFR-10 | Maintainability via bounded complexity | Implemented |
