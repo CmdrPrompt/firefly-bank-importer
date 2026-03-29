@@ -1,7 +1,6 @@
 # TASK-002 Configurable Firefly URL and token
 
 ## Status
-
 done
 
 ## Description
