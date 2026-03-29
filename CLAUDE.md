@@ -36,7 +36,7 @@ If a proposed change cannot be clearly expressed as a requirement and use case, 
 
 Tasks are tracked as individual files in `docs/tasks/`. Each file represents one task.
 
-**File naming:** `TASK-001-short-description.md`
+**File naming:** `<TASK-ID>-short-description.md`
 
 **Branch policy:** Each task must be executed on its own dedicated branch. Do not
 commit task-start changes on `main`.
@@ -62,7 +62,7 @@ Use `make branch-task f=<TASK-ID>` to create/switch branch from task metadata.
 **Task file template:**
 
 ```markdown
-# TASK-<NNN> Short description
+# <TASK-ID> Short description
 
 ## Status
 todo | in-progress | done
@@ -293,6 +293,20 @@ uv run pytest --cov=src --cov-report=term-missing
 ```
 
 Or via Makefile: `make lint && make test`
+
+## Changelog
+
+When updating `CHANGELOG.md`, describe the delivered behavior or system change first,
+not the internal task bookkeeping.
+
+- Write changelog entries in terms of what was added, changed, or fixed for the project.
+- Task IDs such as `<TASK-ID>` may be included for traceability, but only as a suffix or
+  secondary reference.
+- Do not write entries that only say a task was completed; explain the shipped outcome.
+- Prefer concise user- or operator-facing language, for example: `Added web UI CSV upload
+  with per-file validation and feedback (<TASK-ID>).`
+- Group related shipped work into a small number of clear changelog bullets instead of
+  mirroring one bullet per internal task when that would make the changelog noisier.
 
 ## What NOT to do
 
