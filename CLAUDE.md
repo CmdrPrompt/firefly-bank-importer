@@ -94,6 +94,9 @@ then update `Status` to `in-progress` on that branch. When done, update `Status`
 `done` and fill in the `Completion` section with date, a brief summary, and a list of
 all files that were created or modified before committing.
 
+Update `CHANGELOG.md` before the final commit of a task. Follow the Changelog section
+below for style rules. Do not mark the task `done` without a changelog entry.
+
 If task-related work is discovered on `main`, create/switch to the task branch
 immediately and continue there.
 
