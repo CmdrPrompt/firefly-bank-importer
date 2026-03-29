@@ -210,6 +210,15 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 3. The developer validates the refactor with lint and tests.
 - Result: The codebase remains behaviorally stable while meeting complexity gates.
 
+### UC-25: Use current-task Makefile shortcuts
+- Actor: Developer
+- Trigger: The developer is already on a task branch and wants to run stage, commit, or PR workflow without passing `f=<TASK-ID>`.
+- Main flow:
+1. The developer runs a current-task shortcut Make target.
+2. The target resolves the task file from the current branch naming convention.
+3. The target executes stage, commit, or PR logic using metadata in that task file.
+- Result: Task-driven workflow is faster while keeping task files as source of truth.
+
 ### UC-15: Configure Firefly URL and token in web UI settings
 - Actor: User
 - Preconditions: The web UI is running and the settings page is accessible.
@@ -400,6 +409,15 @@ The settings save flow shall support both first-time setup and updates to existi
 ### FR-51 Cognitive complexity lint gate
 All functions under src/ shall satisfy the repository's Complexipy cognitive-complexity threshold enforced by make lint.
 
+### FR-52 Current-task stage shortcut target
+The Makefile shall provide a stage shortcut target that stages files from the task file inferred from the current task branch, without requiring `f=<TASK-ID>`.
+
+### FR-53 Current-task commit shortcut target
+The Makefile shall provide a commit shortcut target that commits with the message from the task file inferred from the current task branch, without requiring `f=<TASK-ID>`.
+
+### FR-54 Current-task PR shortcut target
+The Makefile shall provide a PR shortcut target that opens a pull request using title/body from the task file inferred from the current task branch, without requiring `f=<TASK-ID>`.
+
 ## 6. Non-Functional Requirements
 
 ### NFR-1 Performance
@@ -488,6 +506,8 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | UC-22 | Upload CSV files in web UI | Not implemented |
 | UC-23 | Clear old import logs | Not implemented |
 | UC-24 | Reduce cognitive complexity in flagged functions | Implemented |
+| UC-25 | Use current-task Makefile shortcuts | Implemented |
+| UC-24 | Reduce cognitive complexity in flagged functions | Implemented |
 
 ### Functional Requirements
 
@@ -540,6 +560,9 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | FR-45 | Web UI upload validation | Not implemented |
 | FR-46 | Web UI upload result feedback | Not implemented |
 | FR-51 | Cognitive complexity lint gate | Implemented |
+| FR-52 | Current-task stage shortcut target | Implemented |
+| FR-53 | Current-task commit shortcut target | Implemented |
+| FR-54 | Current-task PR shortcut target | Implemented |
 
 ### Non-Functional Requirements
 
