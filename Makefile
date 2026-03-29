@@ -50,7 +50,13 @@ lint:
 	uv run mypy src/
 	uv run bandit -r src/ -c pyproject.toml
 	uv run pymarkdown --config .pymarkdown scan $(shell find . -name "*.md" -not -path "./.venv/*" -not -path "./.github/*")
-	uv run complexipy src/
+	@uv run complexipy src/; RESULT=$$?; \
+	if [ $$RESULT -ne 0 ]; then \
+		echo ""; \
+		echo "Refactoring priorities (worst first):"; \
+		uv run complexipy src/ --failed --sort desc 2>&1; \
+	fi; \
+	exit $$RESULT
 
 ## Auto-fix ruff and pymarkdown issues
 fix:
