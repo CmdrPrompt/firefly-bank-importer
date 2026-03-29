@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Increased web UI coverage from 73% to 90%, restoring `make test` to passing with 87% total project coverage (TASK-025).
+- Reduced cognitive complexity in configuration and web UI flow by extracting smaller helper functions, moving route logic out of `create_app`, and refactoring dry-run/live-import processing so all functions pass Complexipy thresholds in `make lint` (TASK-026).
 
 ## [0.1.2] - 2026-03-28
 
