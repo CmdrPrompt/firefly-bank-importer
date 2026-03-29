@@ -14,7 +14,7 @@ help:
 	@echo "    make install  -- Create venv, install dependencies and activate pre-commit"
 	@echo ""
 	@echo "  Daily use:"
-	@echo "    make lint        -- Run ruff, mypy, bandit, pymarkdown and radon (cognitive complexity)"
+	@echo "    make lint        -- Run ruff, mypy, bandit, pymarkdown and complexipy (cognitive complexity)"
 	@echo "    make fix         -- Auto-fix ruff and pymarkdown issues"
 	@echo "    make stage       -- Auto-fix and re-stage all staged changes (run before git commit)"
 	@echo "    make branch-task -- Create/switch task branch from task file: make branch-task f=TASK-001"
@@ -50,7 +50,7 @@ lint:
 	uv run mypy src/
 	uv run bandit -r src/ -c pyproject.toml
 	uv run pymarkdown --config .pymarkdown scan $(shell find . -name "*.md" -not -path "./.venv/*" -not -path "./.github/*")
-	uv run radon cc src/ --min C --show-complexity
+	uv run complexipy src/
 
 ## Auto-fix ruff and pymarkdown issues
 fix:
