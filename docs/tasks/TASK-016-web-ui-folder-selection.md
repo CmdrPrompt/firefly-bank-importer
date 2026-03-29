@@ -14,7 +14,7 @@ Implement UC-16 in the web UI: list import folders and show file previews so use
 
 ## Completion
 **Date:** 2026-03-28
-**Summary:** Implemented FastAPI-based web UI for folder selection with HTML + JSON API endpoints. Folder listing detects CSV format, computes row counts and date ranges. Multi-select checkboxes enable folder selection. Added `make web` target for convenient development startup. All 4 acceptance criteria verified: folder listing ✓, metadata display ✓, multi-select working ✓, make target functional ✓. Unit tests (3/3) passing and live tested on http://127.0.0.1:8000.
+**Summary:** Implemented FastAPI-based web UI for folder selection with HTML + JSON API endpoints. Folder listing detects CSV format, computes row counts and date ranges. Multi-select checkboxes enable folder selection. Added `make web` target for convenient development startup. All 4 acceptance criteria verified: folder listing ✓, metadata display ✓, multi-select working ✓, make target functional ✓. Unit tests (3/3) passing and live tested on <http://127.0.0.1:8000>.
 **Files changed:**
 - `Makefile` -- modified
 - `pyproject.toml` -- modified

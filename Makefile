@@ -49,14 +49,14 @@ lint:
 	uv run ruff format --check .
 	uv run mypy src/
 	uv run bandit -r src/ -c pyproject.toml
-	uv run pymarkdown --config .pymarkdown scan $(shell find . -name "*.md" -not -path "./.venv/*")
+	uv run pymarkdown --config .pymarkdown scan $(shell find . -name "*.md" -not -path "./.venv/*" -not -path "./.github/*")
 	uv run radon cc src/ --min C --show-complexity
 
 ## Auto-fix ruff and pymarkdown issues
 fix:
 	uv run ruff check --fix .
 	uv run ruff format .
-	uv run pymarkdown --config .pymarkdown fix $(shell find . -name "*.md" -not -path "./.venv/*")
+	uv run pymarkdown --config .pymarkdown fix $(shell find . -name "*.md" -not -path "./.venv/*" -not -path "./.github/*")
 
 ## Auto-fix and re-stage already-staged files (run before git commit)
 stage:
