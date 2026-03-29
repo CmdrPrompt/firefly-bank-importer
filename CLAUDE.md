@@ -97,6 +97,11 @@ all files that were created or modified before committing.
 If task-related work is discovered on `main`, create/switch to the task branch
 immediately and continue there.
 
+**Branch sync before development:** After switching to the task branch and before
+writing any implementation code, check whether the branch is behind `main`. If it is,
+merge `main` into the task branch (`git merge main`) and resolve any conflicts before
+proceeding. This keeps the task branch current and avoids divergence surprises at PR time.
+
 New tasks can be created by the user, by Claude Code, or by another LLM. Claude Code
 should check `docs/tasks/` for open tasks relevant to the current context before starting work.
 
@@ -237,6 +242,11 @@ show_missing = true
 ```
 
 Run: `pytest --cov=src --cov-report=term-missing`
+
+**Coverage non-regression rule:** Total test coverage must not be lower when a task is
+completed than it was when the task was started. Record the coverage percentage at task
+start and verify it at task completion. If coverage has dropped, add tests to recover
+it before marking the task `done`.
 
 ### pre-commit
 

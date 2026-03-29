@@ -201,6 +201,21 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 4. The system deletes selected logs and reports how many files were removed.
 - Result: Log directory can be cleaned without manual file-system operations.
 
+### UC-15: Configure Firefly URL and token in web UI settings
+- Actor: User
+- Preconditions: The web UI is running and the settings page is accessible.
+- Trigger: The user opens the settings page and submits Firefly URL and API token.
+- Main flow:
+1. The web UI shows the current configured Firefly URL and indicates whether a token is already stored.
+2. The user enters or updates the Firefly URL and API token.
+3. The backend validates the URL by calling Firefly /api/v1/about.
+4. If validation succeeds, the backend persists URL to config.json and token to secrets.json.
+5. The web UI returns a success response.
+- Alternative flow:
+1. If URL validation fails, no values are persisted.
+2. The web UI returns a clear validation error message.
+- Result: Firefly connection settings are managed from the web UI with validation and persistence.
+
 ### UC-22: Upload CSV files in web UI
 - Actor: User
 - Preconditions: The web UI is running and at least one import folder exists.
@@ -360,6 +375,18 @@ The upload flow shall validate that uploaded files are CSV and that headers matc
 
 ### FR-46 Web UI upload result feedback
 The upload flow shall return user-visible per-file feedback containing filename, save status, and rejection reason when validation fails.
+
+### FR-47 Web UI settings read
+The web UI settings endpoint (GET /settings) shall return the current Firefly URL from config.json and indicate whether an API token is stored in secrets.json, without returning the token value.
+
+### FR-48 Web UI settings save
+The web UI settings save endpoint (POST /api/settings) shall accept Firefly URL and API token, validate the URL against Firefly /api/v1/about, and persist URL to config.json plus token to secrets.json only on successful validation.
+
+### FR-49 Web UI settings validation failure
+If URL validation fails in the settings save flow, the system shall not modify config.json or secrets.json and shall return an actionable error message.
+
+### FR-50 Web UI settings update
+The settings save flow shall support both first-time setup and updates to existing values; existing URL and token shall be replaced on successful validation.
 
 ## 6. Non-Functional Requirements
 
