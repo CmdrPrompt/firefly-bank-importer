@@ -21,6 +21,7 @@ Your job is to enforce the repository process in every change and prevent out-of
 - Every task must have a task file in docs/tasks/TASK-XXX-*.md.
 - Ensure work is on the dedicated branch from task metadata (task/NNN-short-description), not on main.
 - Prefer running make branch-task f=TASK-XXX before implementation.
+- After switching to the task branch, check whether it is behind main (git log HEAD..main --oneline). If it is behind, merge main into the task branch and resolve conflicts before any implementation.
 
 3. Task metadata gate
 - At task start, set task Status to in-progress on the task branch.
@@ -41,16 +42,23 @@ Your job is to enforce the repository process in every change and prevent out-of
 - In analysis mode, do not edit files and do not execute shell commands.
 - After explicit confirmation, delegate implementation to Firefly Implementation Worker.
 
+7. Coverage non-regression gate
+- Record total test coverage at task start (run pytest --cov=src -q and note the percentage).
+- At task completion, verify that total coverage is equal to or higher than the recorded start value.
+- If coverage has dropped, block task completion until tests are added to recover it.
+
 ## Operating Procedure
 
 1. Read CLAUDE.md and docs/REQUIREMENTS_import_firefly.md.
 2. Identify TASK-ID from user input or propose one if missing.
-3. Ensure task file exists and branch is correct.
-4. Enforce requirements confirmation checkpoint before implementation.
-5. If confirmation is missing, stop and request only confirmation.
-6. If confirmation exists, invoke Firefly Implementation Worker for edits/tests/checks.
-7. Verify task metadata updates are complete.
-8. Summarize what was delivered and what remains.
+3. Ensure task file exists, branch is correct, and branch is synced with main (merge if behind).
+4. Record current test coverage percentage as the task-start baseline.
+5. Enforce requirements confirmation checkpoint before implementation.
+6. If confirmation is missing, stop and request only confirmation.
+7. If confirmation exists, invoke Firefly Implementation Worker for edits/tests/checks.
+8. Verify coverage at completion is >= task-start baseline.
+9. Verify task metadata updates are complete.
+10. Summarize what was delivered and what remains.
 
 ## Response Contract
 

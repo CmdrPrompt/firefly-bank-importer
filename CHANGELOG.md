@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added dry-run preview endpoints and page showing per-folder and total candidate transactions, duplicate skips, date ranges, warnings, and blocking errors before live import (TASK-018).
 - Added live-import job execution in the web UI with asynchronous start/status APIs, polling-based progress view, per-job event log, current folder/file context, and completion totals (TASK-019).
 - Added a CSV upload page and multipart API endpoint in the web UI for placing files in import folders with per-file validation and user-visible saved/rejected feedback (TASK-020).
+- Added web UI settings endpoints (`GET /settings`, `POST /api/settings`) for reading and updating Firefly URL and API token with URL validation against the Firefly API and atomic persist to `config.json`/`secrets.json`; token value is never returned in responses (TASK-021).
 - Added characterization tests for web UI upload, settings, and live-import error branches (TASK-025).
 
 ### Changed
