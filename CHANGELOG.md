@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a CSV upload page and multipart API endpoint in the web UI for placing files in import folders with per-file validation and user-visible saved/rejected feedback (TASK-020).
 - Added web UI settings endpoints (`GET /settings`, `POST /api/settings`) for reading and updating Firefly URL and API token with URL validation against the Firefly API and atomic persist to `config.json`/`secrets.json`; token value is never returned in responses (TASK-021).
 - Added characterization tests for web UI upload, settings, and live-import error branches (TASK-025).
+- Added Makefile shortcut targets for the active task branch: `stage-current-task`, `commit-current-task`, and `pr-current-task`, enabling task-file-driven stage/commit/PR flow without passing `f=<TASK-ID>` explicitly (TASK-027).
 
 ### Changed
 - Increased web UI coverage from 73% to 90%, restoring `make test` to passing with 87% total project coverage (TASK-025).
