@@ -24,7 +24,7 @@ repos:
         args: ["-c", "pyproject.toml"]
         files: ^src/
 
-  #- repo: https://github.com/rohaquinlop/complexipy-pre-commit
-  #  rev: v4.2.0
-  #  hooks:
-  #    - id: complexipy
+  - repo: https://github.com/rohaquinlop/complexipy-pre-commit
+    rev: v4.2.0
+    hooks:
+      - id: complexipy
