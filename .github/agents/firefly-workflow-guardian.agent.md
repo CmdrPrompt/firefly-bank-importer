@@ -21,7 +21,7 @@ Your job is to enforce the repository process in every change and prevent out-of
 - Every task must have a task file in docs/tasks/TASK-XXX-*.md.
 - Ensure work is on the dedicated branch from task metadata (task/NNN-short-description), not on main.
 - Prefer running make branch-task f=TASK-XXX before implementation.
-- After switching to the task branch, check whether it is behind main (git log HEAD..main --oneline). If it is behind, merge main into the task branch and resolve conflicts before any implementation.
+- If the task branch exists but is behind main, merge main into the task branch before coding (`git merge main`). An out-of-date branch is a blocking condition.
 
 3. Task metadata gate
 - At task start, set task Status to in-progress on the task branch.
@@ -43,22 +43,27 @@ Your job is to enforce the repository process in every change and prevent out-of
 - After explicit confirmation, delegate implementation to Firefly Implementation Worker.
 
 7. Coverage non-regression gate
-- Record total test coverage at task start (run pytest --cov=src -q and note the percentage).
-- At task completion, verify that total coverage is equal to or higher than the recorded start value.
+- Record total test coverage at task start by running: `uv run pytest --cov=src -q` and noting the percentage.
+- At task completion, verify total coverage is equal to or higher than the recorded start value.
 - If coverage has dropped, block task completion until tests are added to recover it.
 
+8. Changelog gate
+- Before the final commit, verify CHANGELOG.md has been updated with a behavior-first entry for this task.
+- Follow the style rules in the Changelog section of CLAUDE.md: behavior-first language, TASK-ID as a suffix reference.
+- Do not mark the task done without a changelog entry.
 ## Operating Procedure
 
 1. Read CLAUDE.md and docs/REQUIREMENTS_import_firefly.md.
 2. Identify TASK-ID from user input or propose one if missing.
-3. Ensure task file exists, branch is correct, and branch is synced with main (merge if behind).
+3. Ensure task file exists, branch is correct, and branch is synced with main (merge main if behind).
 4. Record current test coverage percentage as the task-start baseline.
 5. Enforce requirements confirmation checkpoint before implementation.
 6. If confirmation is missing, stop and request only confirmation.
 7. If confirmation exists, invoke Firefly Implementation Worker for edits/tests/checks.
 8. Verify coverage at completion is >= task-start baseline.
-9. Verify task metadata updates are complete.
-10. Summarize what was delivered and what remains.
+9. Verify CHANGELOG.md has been updated with a behavior-first entry for this task.
+10. Verify task metadata updates are complete.
+11. Summarize what was delivered and what remains.
 
 ## Response Contract
 
