@@ -16,7 +16,12 @@ from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse
 
 from firefly_bank_importer.bank_formats import resolve_bank_format
-from firefly_bank_importer.config import CONFIG_FILE, SECRETS_FILE, TOKEN_FILE
+from firefly_bank_importer.config import (
+    CONFIG_FILE,
+    SECRETS_FILE,
+    TOKEN_FILE,
+    validate_firefly_url,
+)
 from firefly_bank_importer.import_firefly import (
     create_transaction,
     find_account_id,
@@ -80,6 +85,16 @@ class UploadResult(TypedDict):
     status: str
     reason: str | None
     detected_format: str | None
+
+
+class SettingsRead(TypedDict):
+    firefly_url: str | None
+    token_exists: bool
+
+
+class SettingsSaveResult(TypedDict):
+    success: bool
+    error: str | None
 
 
 UploadFolderForm = Annotated[str, Form(...)]
@@ -828,6 +843,7 @@ def create_app(base_folder: Path | None = None) -> FastAPI:
             f"<p>Basmapp: {escape(str(import_base))}</p>"
             f"{_render_folder_table(previews)}"
             "<p><a href='/upload'>Ladda upp CSV-filer</a></p>"
+            "<p><a href='/settings'>Inställningar (Firefly URL &amp; token)</a></p>"
             "</body></html>"
         )
 
@@ -1077,6 +1093,75 @@ def create_app(base_folder: Path | None = None) -> FastAPI:
                 "events": job["events"],
                 "error": job["error"],
             }
+
+    @app.get("/settings")
+    def api_settings_read() -> dict[str, Any]:
+        firefly_url: str | None = None
+        if CONFIG_FILE.exists():
+            try:
+                data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+                raw = str(data.get("firefly_url", "")).strip()
+                firefly_url = raw or None
+            except json.JSONDecodeError:
+                pass
+
+        token_exists = False
+        if SECRETS_FILE.exists():
+            try:
+                data = json.loads(SECRETS_FILE.read_text(encoding="utf-8"))
+                token_exists = bool(str(data.get("api_token", "")).strip())
+            except json.JSONDecodeError:
+                pass
+        elif TOKEN_FILE.exists():
+            token_exists = bool(TOKEN_FILE.read_text(encoding="utf-8").strip())
+
+        return {"firefly_url": firefly_url, "token_exists": token_exists}
+
+    @app.post("/api/settings")
+    async def api_settings_save(request: Request) -> dict[str, Any]:
+        import contextlib  # noqa: PLC0415
+        from http import HTTPStatus  # noqa: PLC0415
+
+        from fastapi import HTTPException  # noqa: PLC0415
+
+        body = await request.json()
+        url = str(body.get("firefly_url", "")).strip().rstrip("/") if isinstance(body, dict) else ""
+        token = str(body.get("api_token", "")).strip() if isinstance(body, dict) else ""
+
+        if not url:
+            raise HTTPException(
+                status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
+                detail={"success": False, "error": "Firefly URL får inte vara tom."},
+            )
+        if not token:
+            raise HTTPException(
+                status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
+                detail={"success": False, "error": "API-token får inte vara tom."},
+            )
+
+        if not validate_firefly_url(url):
+            raise HTTPException(
+                status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
+                detail={"success": False, "error": f"URL-validering misslyckades: {url} svarade inte med HTTP 200."},
+            )
+
+        # Persist — read-modify-write to keep other keys intact
+
+        config: dict[str, object] = {}
+        if CONFIG_FILE.exists():
+            with contextlib.suppress(json.JSONDecodeError):
+                config = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+        config["firefly_url"] = url
+        CONFIG_FILE.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        secrets: dict[str, object] = {}
+        if SECRETS_FILE.exists():
+            with contextlib.suppress(json.JSONDecodeError):
+                secrets = json.loads(SECRETS_FILE.read_text(encoding="utf-8"))
+        secrets["api_token"] = token
+        SECRETS_FILE.write_text(json.dumps(secrets, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        return {"success": True, "error": None}
 
     return app
 
