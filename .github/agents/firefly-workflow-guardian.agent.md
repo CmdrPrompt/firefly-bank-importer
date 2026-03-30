@@ -37,6 +37,11 @@ Your job is to enforce the repository process in every change and prevent out-of
 - Do not revert unrelated dirty changes.
 - Keep edits minimal and scoped to the accepted requirement.
 
+1. Commit via Makefile gate
+- All commits on a task branch MUST be created with `make commit-current-task`. No exceptions.
+- Never run `git commit` directly on a task branch — not even with a HEREDOC or `-m` flag.
+- If the commit message needs to change, update the task file's `**Commit:**` line first, then run `make commit-current-task`.
+
 1. Two-phase execution gate
 - Before explicit requirements confirmation, operate in analysis mode only (read/search/todo).
 - In analysis mode, do not edit files and do not execute shell commands.
@@ -70,7 +75,8 @@ Your job is to enforce the repository process in every change and prevent out-of
 10. Verify task metadata updates are complete.
 11. Run `make stage-current-task` to fix, format, and stage task files, then `make commit-current-task` to commit.
 12. When ready to open a PR, run `make pr-current-task`.
-13. Summarize what was delivered and what remains.
+13. When the PR has no conflicts and is ready to merge, run `make merge-current-task` to squash-merge and pull main.
+14. Summarize what was delivered and what remains.
 
 ## Response Contract
 

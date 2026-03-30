@@ -322,6 +322,10 @@ make test   # pytest with coverage
 
 ### Task commit workflow
 
+**Rule: all commits on a task branch must be created with `make commit-current-task`. Never
+run `git commit` directly. If the message needs to change, update the task file's `**Commit:**`
+line first.**
+
 Use these Makefile targets to branch, stage, commit, and open PRs from task file metadata:
 
 ```bash
@@ -331,7 +335,8 @@ make stage-current-task            # auto-fix formatting, stage files listed in 
 git diff --staged                  # optional: review before committing
 make commit-current-task           # commit using message from task file
 make pr-current-task               # open GitHub PR with task title and description
-# After the PR is opened: run /clear to reset context before starting the next task
+make merge-current-task            # squash-merge PR when ready (no conflicts), pull main
+# After the PR is merged: run /clear to reset context before starting the next task
 ```
 
 Or with explicit task ID (useful when not on the task branch yet):
