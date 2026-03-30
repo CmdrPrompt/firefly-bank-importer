@@ -38,58 +38,6 @@ def validate_firefly_url(
         return False
 
 
-def _read_firefly_url_from_config(config_path: Path) -> str | None:
-    if not config_path.exists():
-        return None
-    try:
-        data: dict[str, object] = json.loads(config_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, KeyError):
-        return None
-
-    url_raw = data.get("firefly_url", "")
-    url = str(url_raw).strip() if url_raw else ""
-    return url or None
-
-
-def _prompt_firefly_url(
-    *,
-    prompt_fn: Callable[[str], str],
-    validate_fn: Callable[[str], bool] | None,
-) -> str:
-    while True:
-        raw = prompt_fn("Ange Firefly III URL (t.ex. http://truenas.local:30105): ").strip()
-        if not raw:
-            continue
-        url = raw.rstrip("/")
-        if validate_fn is None:
-            return url
-
-        logging.info("Validerar URL %s...", url)
-        if validate_fn(url):
-            logging.info("URL validerad.")
-            return url
-        logging.warning("Validering misslyckades. Försök igen.")
-
-
-def _load_token_from_secrets(secrets_path: Path) -> str | None:
-    if not secrets_path.exists():
-        return None
-    try:
-        data = json.loads(secrets_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, KeyError):
-        return None
-
-    token = str(data.get("api_token", "")).strip()
-    return token or None
-
-
-def _load_token_from_legacy_file(token_path: Path) -> str | None:
-    if not token_path.exists():
-        return None
-    token = token_path.read_text(encoding="utf-8").strip()
-    return token or None
-
-
 def load_firefly_url(
     config_path: Path = CONFIG_FILE,
     *,
@@ -109,20 +57,66 @@ def load_firefly_url(
     Trailing slashes are stripped only from interactively entered values.
     """
     if not force:
-        existing_url = _read_firefly_url_from_config(config_path)
-        if existing_url is not None:
+        existing_url = _read_url_from_config(config_path)
+        if existing_url:
             return existing_url
 
     url = _prompt_firefly_url(prompt_fn=prompt_fn, validate_fn=validate_fn)
+    _save_firefly_url(config_path, url)
+    return url
 
+
+def _read_url_from_config(config_path: Path) -> str:
+    if not config_path.exists():
+        return ""
+
+    try:
+        data: dict[str, object] = json.loads(config_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, KeyError):
+        return ""
+
+    url_raw = data.get("firefly_url", "")
+    return str(url_raw).strip() if url_raw else ""
+
+
+def _prompt_firefly_url(
+    *,
+    prompt_fn: Callable[[str], str],
+    validate_fn: Callable[[str], bool] | None,
+) -> str:
+    while True:
+        raw = prompt_fn("Ange Firefly III URL (t.ex. http://truenas.local:30105): ").strip()
+        if not raw:
+            continue
+
+        url = raw.rstrip("/")
+        if not _is_url_valid(url, validate_fn):
+            continue
+        return url
+
+
+def _is_url_valid(url: str, validate_fn: Callable[[str], bool] | None) -> bool:
+    if validate_fn is None:
+        return True
+
+    logging.info("Validerar URL %s...", url)
+    if validate_fn(url):
+        logging.info("URL validerad.")
+        return True
+
+    logging.warning("Validering misslyckades. Försök igen.")
+    return False
+
+
+def _save_firefly_url(config_path: Path, url: str) -> None:
     config: dict[str, object] = {}
     if config_path.exists():
         with contextlib.suppress(json.JSONDecodeError):
             config = json.loads(config_path.read_text(encoding="utf-8"))
+
     config["firefly_url"] = url
     config_path.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
     logging.info("Sparade URL till %s.", config_path)
-    return url
 
 
 def load_api_token(
@@ -140,19 +134,41 @@ def load_api_token(
     3. If neither exists (or *force* is True), prompt using hidden input.
     4. Save the token to *secrets_path* and return it.
     """
-    if token_path is None:
-        token_path = TOKEN_FILE
+    token_path = token_path or TOKEN_FILE
 
     if not force:
-        secrets_token = _load_token_from_secrets(secrets_path)
-        if secrets_token is not None:
-            return secrets_token
-
-        legacy_token = _load_token_from_legacy_file(token_path)
-        if legacy_token is not None:
-            return legacy_token
+        existing_token = _read_token_from_paths(secrets_path=secrets_path, token_path=token_path)
+        if existing_token:
+            return existing_token
 
     token = prompt_fn("Ange Firefly III API-token: ").strip()
+    _save_api_token(secrets_path, token)
+    return token
+
+
+def _read_token_from_paths(*, secrets_path: Path, token_path: Path) -> str:
+    token_from_secrets = _read_token_from_secrets(secrets_path)
+    if token_from_secrets:
+        return token_from_secrets
+
+    if not token_path.exists():
+        return ""
+    return token_path.read_text(encoding="utf-8").strip()
+
+
+def _read_token_from_secrets(secrets_path: Path) -> str:
+    if not secrets_path.exists():
+        return ""
+
+    try:
+        data = json.loads(secrets_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, KeyError):
+        return ""
+
+    return str(data.get("api_token", "")).strip()
+
+
+def _save_api_token(secrets_path: Path, token: str) -> None:
 
     secrets: dict[str, object] = {}
     if secrets_path.exists():
@@ -161,4 +177,3 @@ def load_api_token(
     secrets["api_token"] = token
     secrets_path.write_text(json.dumps(secrets, ensure_ascii=False, indent=2), encoding="utf-8")
     logging.info("Sparade token till %s.", secrets_path)
-    return token

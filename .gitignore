@@ -201,6 +201,10 @@ cython_debug/
 # Ruff stuff:
 .ruff_cache/
 
+# Complexipy output
+complexipy_results_*.json
+.complexipy_cache/
+
 # PyPI configuration file
 .pypirc
 
