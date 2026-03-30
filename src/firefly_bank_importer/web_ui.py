@@ -27,10 +27,12 @@ from firefly_bank_importer.config import (
 )
 from firefly_bank_importer.import_firefly import (
     create_transaction,
+    fetch_accounts_from_firefly,
     find_account_id,
     get_latest_transaction_date,
     load_account_cache,
     sanitize_folder_name,
+    save_account_cache,
 )
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -99,6 +101,12 @@ class SettingsRead(TypedDict):
 class SettingsSaveResult(TypedDict):
     success: bool
     error: str | None
+
+
+class RefreshAccountsResult(TypedDict):
+    total_accounts: int
+    new_folders: int
+    account_names: list[str]
 
 
 class ImportHistoryRun(TypedDict):
@@ -1303,6 +1311,8 @@ def index(request: Request) -> str:
         f"{_render_folder_table(previews)}"
         "<p><a href='/upload'>Ladda upp CSV-filer</a></p>"
         "<p><a href='/history'>Importhistorik &amp; loggar</a></p>"
+        "<p><form method='post' action='/refresh-accounts' style='display:inline'>"
+        "<button type='submit'>Uppdatera konton</button></form></p>"
         "<p><a href='/settings'>Inställningar (Firefly URL &amp; token)</a></p>"
         "</body></html>"
     )
@@ -1341,6 +1351,70 @@ def api_import_history_details(run_id: str) -> dict[str, Any]:
     if details is None:
         raise HTTPException(status_code=404, detail={"error": "Importkörning hittades inte."})
     return dict(details)
+
+
+def _perform_refresh_accounts(import_base: Path) -> RefreshAccountsResult:
+    firefly_url, api_token, _ = _load_web_firefly_settings()
+    if not firefly_url or not api_token:
+        raise HTTPException(
+            status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
+            detail={"error": "Firefly URL och API-token måste konfigureras innan kontoinhämtning."},
+        )
+    session = requests.Session()
+    session.headers["Authorization"] = f"Bearer {api_token}"
+    accounts = fetch_accounts_from_firefly(session, firefly_url)
+    save_account_cache(accounts)
+    new_folders = 0
+    for account in accounts:
+        folder_name = f"kontoutdrag_{sanitize_folder_name(account['name'])}"
+        folder_path = import_base / folder_name
+        if not folder_path.exists():
+            folder_path.mkdir(parents=True)
+            new_folders += 1
+    account_names = [a["name"] for a in accounts]
+    return {"total_accounts": len(accounts), "new_folders": new_folders, "account_names": account_names}
+
+
+@router.post("/api/refresh-accounts")
+def api_refresh_accounts(request: Request) -> dict[str, Any]:
+    import_base = _get_import_base(request)
+    try:
+        return dict(_perform_refresh_accounts(import_base))
+    except HTTPException:
+        raise
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_GATEWAY,
+            detail={"error": str(exc)},
+        ) from exc
+
+
+def _render_refresh_result_page(result: RefreshAccountsResult) -> str:
+    names_html = "".join(f"<li>{escape(name)}</li>" for name in result["account_names"])
+    return (
+        "<html><head><meta charset='utf-8'><title>Konton uppdaterade</title></head><body>"
+        "<h1>Konton uppdaterade</h1>"
+        f"<p>Hittade <strong>{result['total_accounts']}</strong> konton. "
+        f"<strong>{result['new_folders']}</strong> nya mappar skapades.</p>"
+        f"<ul>{names_html}</ul>"
+        "<p><a href='/'>Tillbaka till startsidan</a></p>"
+        "</body></html>"
+    )
+
+
+@router.post("/refresh-accounts", response_class=HTMLResponse)
+def refresh_accounts_page(request: Request) -> str:
+    import_base = _get_import_base(request)
+    try:
+        result = _perform_refresh_accounts(import_base)
+    except HTTPException:
+        raise
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_GATEWAY,
+            detail={"error": str(exc)},
+        ) from exc
+    return _render_refresh_result_page(result)
 
 
 @router.get("/upload", response_class=HTMLResponse)
