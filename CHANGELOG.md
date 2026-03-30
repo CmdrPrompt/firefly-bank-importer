@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Documented the design decision that empty CSV files are warnings (non-blocking) while unknown formats are errors (blocking) in `web_ui.py` (TASK-030).
 
 ### Added
+- Added Nordea bank CSV format support: the importer now recognises Nordea exports (`Bokföringsdag`, `Belopp`, `Rubrik` headers), normalises `YYYY/MM/DD` dates to ISO 8601, and converts Swedish comma-decimal amounts to US format before sending to the Firefly API (TASK-039).
 - Added a FastAPI-based web UI for import folder selection, including HTML and JSON endpoints for listing folders, CSV counts, detected formats, and date ranges (TASK-016).
 - Added interactive account matching in the web UI with candidate lookup from the Firefly account cache and validation that blocks unresolved folders (TASK-017).
 - Added dry-run preview endpoints and page showing per-folder and total candidate transactions, duplicate skips, date ranges, warnings, and blocking errors before live import (TASK-018).
