@@ -39,8 +39,17 @@ class HeaderBankFormat:
         return self.required_headers.issubset(set(headers))
 
     def normalise_date(self, raw: str) -> str:
-        """Convert a raw date string to ISO 8601 (YYYY-MM-DD)."""
-        return datetime.strptime(raw.strip(), self.date_format).strftime("%Y-%m-%d")
+        """Convert a raw date string to ISO 8601 (YYYY-MM-DD).
+
+        If parsing with the bank's own date_format fails, falls back to
+        ISO 8601 (%Y-%m-%d) so that already-normalised dates (e.g. from
+        split output files) are returned unchanged.
+        """
+        cleaned = raw.strip()
+        try:
+            return datetime.strptime(cleaned, self.date_format).strftime("%Y-%m-%d")
+        except ValueError:
+            return datetime.strptime(cleaned, "%Y-%m-%d").strftime("%Y-%m-%d")
 
     def build_column_mapping(self, headers: list[str]) -> ColumnMapping:
         def _optional_index(header: str | None) -> int | None:
