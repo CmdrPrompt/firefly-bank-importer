@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Removed unreachable `KeyError` from `except`-clauses in `config.py` — `json.loads()` never raises `KeyError` (TASK-030).
+- Removed dead code `detect_csv_format()` and `_get_csv_indices()` from `import_firefly.py` — neither function was called (TASK-030).
+- Removed silent `[:10]`-slice before `strptime` in `web_ui.py` — date strings are now parsed strictly as `YYYY-MM-DD` (TASK-030).
+- Replaced misleading catch-all warning "Kunde inte läsa Firefly-inställningar" with separate, precise messages for missing URL and missing token in `web_ui.py` (TASK-030).
+- Added `description_idx` bounds-check inside `_build_live_import_description` in `web_ui.py` to guard against out-of-bounds access if called outside its normal context (TASK-030).
+- Documented the design decision that empty CSV files are warnings (non-blocking) while unknown formats are errors (blocking) in `web_ui.py` (TASK-030).
+
 ### Added
 - Added a FastAPI-based web UI for import folder selection, including HTML and JSON endpoints for listing folders, CSV counts, detected formats, and date ranges (TASK-016).
 - Added interactive account matching in the web UI with candidate lookup from the Firefly account cache and validation that blocks unresolved folders (TASK-017).

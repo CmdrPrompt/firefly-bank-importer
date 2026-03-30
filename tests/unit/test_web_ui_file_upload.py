@@ -117,7 +117,7 @@ def test_load_web_firefly_settings_uses_token_fallback_on_invalid_config(
     assert firefly_url is None
     assert api_token == "fallback-token"
     assert "Kunde inte läsa config.json." in warnings
-    assert "Kunde inte läsa Firefly-inställningar; duplicate-skip uppskattas som 0." in warnings
+    assert "Firefly-URL saknas eller är tom; duplicate-skip hoppas över." in warnings
 
 
 def test_load_web_firefly_settings_reads_valid_config_and_secrets(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
