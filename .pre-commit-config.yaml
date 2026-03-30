@@ -16,6 +16,10 @@ repos:
           - hypothesis
           - requests
           - types-requests
+          - fastapi
+          - uvicorn
+          - python-multipart
+          - httpx
 
   - repo: https://github.com/PyCQA/bandit
     rev: 1.9.4

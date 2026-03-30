@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Web UI import history and per-run log details with new endpoints:
+  `/api/import-history`, `/api/import-history/{run_id}`, `/history`, and `/history/{run_id}`.
+- Unit tests for import history API/page behavior in `tests/unit/test_web_ui_import_history.py`.
+
+### Changed
+- Project dependencies now include web UI runtime packages (`fastapi`, `uvicorn`,
+  `python-multipart`) to ensure `uv sync --extra dev` keeps web execution working.
+- Added `httpx` in the dev dependency group to support FastAPI/Starlette TestClient-based tests.
+
 ## [0.1.2] - 2026-03-28
 
 ### Added

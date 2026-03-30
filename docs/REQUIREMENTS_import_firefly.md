@@ -169,6 +169,17 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 4. The core importer discovers and uses the package during normal processing.
 - Result: New bank formats can be added by extension rather than by editing core CSV detection logic.
 
+### UC-20: Show import history and logs in web UI
+- Actor: User
+- Trigger: The user opens the web UI to review prior imports.
+- Main flow:
+1. The web UI requests a list of prior import runs.
+2. The backend returns entries with status and timestamp.
+3. The user selects one run to inspect details.
+4. The backend returns detailed log lines for that run.
+5. The web UI renders the detailed logs for troubleshooting.
+- Result: The user can audit and troubleshoot previous imports without manual file access.
+
 ## 5. Functional Requirements
 
 ### FR-1 Token loading
@@ -285,6 +296,15 @@ The core importer shall consume bank format packages through a shared contract/i
 ### FR-36 Unsupported format handling in package architecture
 If no bank format package matches a CSV header, the script shall log an unknown-format error and skip the file.
 
+### FR-37 Web UI import history list API
+The system shall provide an API endpoint that returns prior import runs with at least run identifier, status, and timestamp.
+
+### FR-38 Web UI import history view
+The web UI shall display import history entries returned by the backend, including status and timestamp for each run.
+
+### FR-39 Web UI per-run log details
+The system shall provide an API endpoint and corresponding web UI view to show detailed logs for a selected import run.
+
 ## 6. Non-Functional Requirements
 
 ### NFR-1 Performance
@@ -364,6 +384,7 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | UC-12 | Configure Firefly connection on first run | Not implemented |
 | UC-13 | Resolve a bank export format through a format package | Implemented |
 | UC-14 | Add a new bank export format without changing the core importer | Implemented |
+| UC-20 | Show import history and logs in web UI | Implemented |
 
 ### Functional Requirements
 
@@ -405,6 +426,9 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | FR-34 | Normalized field mapping | Implemented |
 | FR-35 | Shared importer contract for bank formats | Implemented |
 | FR-36 | Unsupported format handling in package architecture | Implemented |
+| FR-37 | Web UI import history list API | Implemented |
+| FR-38 | Web UI import history view | Implemented |
+| FR-39 | Web UI per-run log details | Implemented |
 
 ### Non-Functional Requirements
 
