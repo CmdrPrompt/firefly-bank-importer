@@ -85,7 +85,7 @@ What needs to be done and why.
 **Files changed:**
 - `path/to/file` — created / modified
 **Branch:** `git checkout -b task/<NNN>-short-description`
-**Stage:** `git add path/to/file1 path/to/file2`
+**Stage:** `git add path/to/file1 path/to/file2 CHANGELOG.md`
 **Commit:** `git commit -m "Short imperative summary of what was done"`
 ```
 
@@ -300,12 +300,33 @@ Add `pre-commit` to dev dependencies: `uv add --dev pre-commit`
 Pre-commit hooks run ruff and mypy automatically on every `git commit`. Run the full chain manually before pushing:
 
 ```bash
-uv run ruff check . && uv run ruff format .
-uv run mypy src/
-uv run pytest --cov=src --cov-report=term-missing
+make lint   # ruff, mypy, bandit, pymarkdown, complexipy
+make test   # pytest with coverage
 ```
 
-Or via Makefile: `make lint && make test`
+### Task commit workflow
+
+Use these Makefile targets to branch, stage, commit, and open PRs from task file metadata:
+
+```bash
+make branch-task f=TASK-001        # create/switch to task branch
+# ... implement, then update CHANGELOG.md and task file Completion section ...
+make stage-current-task            # auto-fix formatting, stage files listed in task file
+git diff --staged                  # optional: review before committing
+make commit-current-task           # commit using message from task file
+make pr-current-task               # open GitHub PR with task title and description
+# After the PR is opened: run /clear to reset context before starting the next task
+```
+
+Or with explicit task ID (useful when not on the task branch yet):
+
+```bash
+make stage-task f=TASK-001
+make commit-task f=TASK-001
+make pr-task f=TASK-001
+```
+
+Use `make fix` to auto-fix ruff and pymarkdown issues without running the full lint suite.
 
 ## Changelog
 
