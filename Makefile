@@ -1,4 +1,4 @@
-.PHONY: all help setup install lint fix stage branch-task stage-task commit-task pr-task stage-current-task commit-current-task pr-current-task web test clean clean-complexity
+.PHONY: all help setup install lint fix stage branch-task stage-task commit-task pr-task merge-pr merge-current-task stage-current-task commit-current-task pr-current-task web test clean clean-complexity
 
 TASKS_DIR := docs/tasks
 
@@ -21,9 +21,11 @@ help:
 	@echo "    make stage-task  -- Auto-fix and stage files listed in task file: make stage-task f=TASK-001"
 	@echo "    make commit-task -- Commit using message from task file: make commit-task f=TASK-001"
 	@echo "    make pr-task     -- Switch to task branch and open GitHub PR: make pr-task f=TASK-001"
+	@echo "    make merge-pr    -- Merge an open PR for a task branch (squash): make merge-pr f=TASK-001"
 	@echo "    make stage-current-task  -- Stage files for the current task branch"
 	@echo "    make commit-current-task -- Commit for the current task branch"
 	@echo "    make pr-current-task     -- Open PR for the current task branch"
+	@echo "    make merge-current-task  -- Merge the open PR for the current task branch (squash)"
 	@echo "    make web         -- Start firefly-import-web on http://127.0.0.1:8000"
 	@echo "    make test        -- Run pytest with coverage"
 	@echo "    make clean-complexity -- Remove complexipy cache and result files"
@@ -35,6 +37,7 @@ help:
 	@echo "    git diff --staged            # optional: review before committing"
 	@echo "    make commit-task f=TASK-001  # commit with message from task file"
 	@echo "    make pr-task f=TASK-001      # open PR on GitHub with task title + body"
+	@echo "    make merge-current-task      # squash-merge PR if mergeable, pull main"
 	@echo ""
 
 ## Install uv if missing (run once per machine)
@@ -174,6 +177,36 @@ pr-current-task:
 	TASK_ID="TASK-$$TASK_NUM"; \
 	echo "Running: make pr-task f=$$TASK_ID"; \
 	$(MAKE) pr-task f=$$TASK_ID
+
+## Squash-merge the open PR for a task branch, then pull main: make merge-pr f=TASK-001
+merge-pr:
+	@[ -n "$(f)" ] || (echo "Usage: make merge-pr f=<task-id-or-filename>"; exit 1)
+	@TASK_FILE=$$(find $(TASKS_DIR) -name "$(f)*.md" | head -1); \
+	[ -n "$$TASK_FILE" ] || (echo "No task file found matching '$(f)' in $(TASKS_DIR)"; exit 1); \
+	TASK_BASE=$$(basename "$$TASK_FILE" .md); \
+	BRANCH=$$(echo "$$TASK_BASE" | sed 's/^TASK-/task-/' | tr '[:upper:]' '[:lower:]'); \
+	BRANCH=$$(echo "$$TASK_BASE" | sed 's/^\(TASK-[0-9]*\)-/task\/\1-/' | tr '[:upper:]' '[:lower:]'); \
+	PR_NUM=$$(gh pr list --head "$$BRANCH" --json number --jq '.[0].number' 2>/dev/null); \
+	[ -n "$$PR_NUM" ] || (echo "No open PR found for branch $$BRANCH"; exit 1); \
+	MERGEABLE=$$(gh pr view "$$PR_NUM" --json mergeable --jq '.mergeable'); \
+	if [ "$$MERGEABLE" = "MERGEABLE" ]; then \
+		echo "Merging PR #$$PR_NUM ($$BRANCH) into main via squash..."; \
+		gh pr merge "$$PR_NUM" --squash --delete-branch; \
+		git checkout main; \
+		git pull; \
+	else \
+		echo "PR #$$PR_NUM is not mergeable (state: $$MERGEABLE). Resolve conflicts first."; \
+		exit 1; \
+	fi
+
+## Squash-merge the open PR for the current task branch, then pull main
+merge-current-task:
+	@CURRENT_BRANCH=$$(git branch --show-current); \
+	TASK_NUM=$$(echo "$$CURRENT_BRANCH" | sed -n 's#^task/\([0-9][0-9][0-9]\)-.*#\1#p'); \
+	[ -n "$$TASK_NUM" ] || (echo "Current branch '$$CURRENT_BRANCH' is not a task branch (expected task/<NNN>-...)"; exit 1); \
+	TASK_ID="TASK-$$TASK_NUM"; \
+	echo "Running: make merge-pr f=$$TASK_ID"; \
+	$(MAKE) merge-pr f=$$TASK_ID
 
 ## Start web UI
 web:
