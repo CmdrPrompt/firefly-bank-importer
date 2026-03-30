@@ -132,6 +132,22 @@ rather than hand-picking them.
 
 Create a task file in `docs/tasks/` for each area of untested code before starting work.
 
+## Bug Discovery
+
+To proactively hunt for bugs across the codebase — without fixing anything — use the
+**Firefly Bug Triage** agent (`.github/agents/firefly-bug-triage.agent.md`).
+
+It analyses code against `docs/REQUIREMENTS_import_firefly.md`, produces a prioritised
+list of confirmed bugs and unconfirmed findings, and creates task files in `docs/tasks/`
+for each bug the user approves. All fixes then go through the normal Guardian → Worker
+flow.
+
+Use Bug Triage when:
+
+- Starting work on an area with no existing tests
+- Suspecting correctness issues but unsure where to look
+- Wanting a systematic sweep before a refactor
+
 ## Architecture & Design Principles
 
 ### SOLID

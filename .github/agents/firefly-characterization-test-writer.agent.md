@@ -61,6 +61,11 @@ Report to the user:
 - Which behaviors were flagged as potentially incorrect.
 - Whether any of those flagged behaviors should become tasks for Guardian + Worker to fix via the normal TDD flow.
 
+If many areas were flagged or the user wants a broader sweep of the codebase before
+committing to fixes, suggest running the **Firefly Bug Triage** agent instead —
+it analyses code against requirements, produces a prioritised bug list, and creates
+task files without writing any tests or code.
+
 ## Prioritization order
 
 When no specific target is given, work in this order (highest risk first):
