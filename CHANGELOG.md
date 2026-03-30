@@ -8,14 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Web UI import history and per-run log details with new endpoints:
-  `/api/import-history`, `/api/import-history/{run_id}`, `/history`, and `/history/{run_id}`.
-- Unit tests for import history API/page behavior in `tests/unit/test_web_ui_import_history.py`.
+- Added a FastAPI-based web UI for import folder selection, including HTML and JSON endpoints for listing folders, CSV counts, detected formats, and date ranges (TASK-016).
+- Added interactive account matching in the web UI with candidate lookup from the Firefly account cache and validation that blocks unresolved folders (TASK-017).
+- Added dry-run preview endpoints and page showing per-folder and total candidate transactions, duplicate skips, date ranges, warnings, and blocking errors before live import (TASK-018).
+- Added live-import job execution in the web UI with asynchronous start/status APIs, polling-based progress view, per-job event log, current folder/file context, and completion totals (TASK-019).
+- Added web UI import history and per-run log details with endpoints (`/api/import-history`, `/api/import-history/{run_id}`) and pages (`/history`, `/history/{run_id}`), plus unit tests for list/details behavior (TASK-022).
+- Added a CSV upload page and multipart API endpoint in the web UI for placing files in import folders with per-file validation and user-visible saved/rejected feedback (TASK-020).
+- Added web UI settings endpoints (`GET /settings`, `POST /api/settings`) for reading and updating Firefly URL and API token with URL validation against the Firefly API and atomic persist to `config.json`/`secrets.json`; token value is never returned in responses (TASK-021).
+- Added characterization tests for web UI upload, settings, and live-import error branches (TASK-025).
+- Added Makefile shortcut targets for the active task branch: `stage-current-task`, `commit-current-task`, and `pr-current-task`, enabling task-file-driven stage/commit/PR flow without passing `f=<TASK-ID>` explicitly (TASK-027).
 
 ### Changed
-- Project dependencies now include web UI runtime packages (`fastapi`, `uvicorn`,
-  `python-multipart`) to ensure `uv sync --extra dev` keeps web execution working.
-- Added `httpx` in the dev dependency group to support FastAPI/Starlette TestClient-based tests.
+- Increased web UI coverage from 73% to 90%, restoring `make test` to passing with 87% total project coverage (TASK-025).
+- Reduced cognitive complexity in configuration and web UI flow by extracting smaller helper functions, moving route logic out of `create_app`, and refactoring dry-run/live-import processing so all functions pass Complexipy thresholds in `make lint` (TASK-026).
+
+### Fixed
+- Made optional bank-format column mapping robust when optional headers are configured but absent in CSV input, so `build_column_mapping` now returns `None` for missing optional indices instead of raising lookup errors.
 
 ## [0.1.2] - 2026-03-28
 
