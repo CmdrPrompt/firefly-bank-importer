@@ -30,14 +30,15 @@ Relevant requirements: UC-13, UC-14, FR-32 – FR-36.
 **Make target:** `make branch-task f=TASK-039`
 
 ## Acceptance criteria
-- [ ] `src/firefly_bank_importer/bank_formats/nordea.py` exists and defines a `NORDEA_FORMAT` using `HeaderBankFormat`.
-- [ ] `NORDEA_FORMAT` is registered in the bank-format registry (`__init__.py`).
-- [ ] `NORDEA_FORMAT.matches()` returns `True` for a Nordea header row and `False` for SEB/ICA headers.
-- [ ] `NORDEA_FORMAT.build_column_mapping()` maps `Bokföringsdag` → `date_idx`, `Belopp` → `amount_idx`, `Rubrik` → `description_idx`, `Saldo` → `balance_idx`.
-- [ ] Nordea date format `YYYY/MM/DD` is parsed correctly by the importer (no crash, correct date).
-- [ ] Amount and balance values are normalised to US format before processing: comma decimal separator replaced by dot, thousands separators (space or period in Swedish format, e.g. `1 234,56` or `1.234,56`) stripped.
-- [ ] Unit tests cover format detection, column mapping, and date/amount normalisation for Nordea rows.
-- [ ] `make lint` and `make test` pass with no regressions and coverage is not lower than at task start.
+
+- [x] `src/firefly_bank_importer/bank_formats/nordea.py` exists and defines a `NORDEA_FORMAT` using `HeaderBankFormat`.
+- [x] `NORDEA_FORMAT` is registered in the bank-format registry (`__init__.py`).
+- [x] `NORDEA_FORMAT.matches()` returns `True` for a Nordea header row and `False` for SEB/ICA headers.
+- [x] `NORDEA_FORMAT.build_column_mapping()` maps `Bokföringsdag` → `date_idx`, `Belopp` → `amount_idx`, `Rubrik` → `description_idx`, `Saldo` → `balance_idx`.
+- [x] Nordea date format `YYYY/MM/DD` is parsed correctly by the importer (no crash, correct date).
+- [x] Amount and balance values are normalised to US format before processing: comma decimal separator replaced by dot, thousands separators (space or period in Swedish format, e.g. `1 234,56` or `1.234,56`) stripped.
+- [x] Unit tests cover format detection, column mapping, and date/amount normalisation for Nordea rows.
+- [x] `make lint` and `make test` pass with no regressions and coverage is not lower than at task start.
 
 ## Completion
 
@@ -56,6 +57,7 @@ Relevant requirements: UC-13, UC-14, FR-32 – FR-36.
 - `docs/REQUIREMENTS_import_firefly.md` — modified (UC-26, FR-5, FR-6, section 7)
 - `docs/tasks/TASK-039-nordea-bank-format.md` — modified
 - `CHANGELOG.md` — modified
+- `.pre-commit-config.yaml` — modified (fixed pre-existing complexipy v4.2/v5.2 threshold mismatch)
 
 **Branch:** `task/039-nordea-bank-format`
 
