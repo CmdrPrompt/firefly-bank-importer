@@ -249,12 +249,12 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 - Actor: User
 - Trigger: The user clicks "Refresh accounts" in the web UI.
 - Main flow:
-1. The web UI sends a POST request to `/api/refresh-accounts`.
+1. The web UI sends a POST request to `/refresh-accounts`.
 2. The backend calls Firefly to fetch all asset accounts and rebuilds the local cache.
 3. The backend creates any new import folders for newly discovered accounts.
-4. The backend returns a summary: total accounts, new folders created, any errors.
-5. The web UI displays the summary to the user.
-- Result: Account cache and import folders are updated without needing CLI access.
+4. The backend returns a result page showing: total accounts found, list of all account names, new folders created, any errors.
+5. The user sees which accounts are available and how many folders were created.
+- Result: Account cache and import folders are updated; the user sees the full list of discovered accounts.
 
 ### UC-22: Upload CSV files in web UI
 - Actor: User
@@ -450,10 +450,13 @@ The system shall provide a web UI page that lists prior import runs with status 
 The system shall provide an API endpoint and corresponding web UI page to show detailed log lines for a selected import run.
 
 ### FR-58 Web UI refresh-accounts endpoint
-The system shall provide a POST `/api/refresh-accounts` endpoint that triggers live account discovery from Firefly, updates the local cache, creates missing import folders, and returns a summary with total accounts found and new folders created.
+The system shall provide a POST `/api/refresh-accounts` endpoint that triggers live account discovery from Firefly, updates the local cache, creates missing import folders, and returns a JSON summary with total accounts found, list of discovered account names, and new folders created.
 
 ### FR-59 Web UI refresh-accounts action
-The web UI shall expose a "Refresh accounts" action that calls the refresh endpoint and displays the returned summary inline.
+The web UI index page shall expose a "Refresh accounts" button that POSTs to `/refresh-accounts`.
+
+### FR-60 Web UI refresh-accounts result page
+The system shall provide a POST `/refresh-accounts` HTML endpoint that performs account refresh and renders a result page showing total accounts found, each discovered account name, new folders created count, and a link back to the index.
 
 ## 6. Non-Functional Requirements
 
@@ -607,6 +610,7 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | FR-57 | Web UI per-run log details | Implemented |
 | FR-58 | Web UI refresh-accounts endpoint | Implemented |
 | FR-59 | Web UI refresh-accounts action | Implemented |
+| FR-60 | Web UI refresh-accounts result page | Implemented |
 
 ### Non-Functional Requirements
 
