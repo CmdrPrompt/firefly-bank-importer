@@ -1,12 +1,17 @@
 # firefly-bank-importer
 
-Python CLI tool and web UI for importing bank transactions from CSV exports (currently SEB and ICA formats) into [Firefly III](https://www.firefly-iii.org/) via its REST API.
+I didn't quite like the built-in Firefly III import tool for several reasons, one of them being that it seemed very slow and probably very serial.
 
+So, here's another import tool for importing bank transactions into Firefly III. This one is a Python CLI tool and a (currently really ugly) web UI for importing bank transactions from CSV exports (currently SEB and ICA formats) into [Firefly III](https://www.firefly-iii.org/) via its REST API.
+
+- Multi-threaded imports makes this faster than the original one
 - Discovers asset accounts from Firefly and caches them locally
-- Prevents duplicate imports via latest-date filtering per account
+- Automatically prevents duplicate imports via latest-date filtering per account
 - Automatically splits multi-month CSV exports into monthly files
 - Dry-run mode, parallel posting, and timestamped log files
 - Web UI for folder selection, dry-run preview, live import, CSV upload, and import history
+
+Note: The CLI does everything it's built to do, while the web UI is still a work in progress.
 
 ## Installation
 
@@ -18,7 +23,7 @@ cd firefly-bank-importer
 uv sync
 ```
 
-On first run, configure your Firefly III URL and API token interactively — or via the web UI settings page.
+On first CLI run, configure your Firefly III URL and API token interactively — or via the web UI settings page.
 
 ## Usage
 
