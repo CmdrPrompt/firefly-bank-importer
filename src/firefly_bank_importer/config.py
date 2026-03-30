@@ -56,38 +56,67 @@ def load_firefly_url(
     The stored URL is returned as-is (no trailing-slash stripping on read).
     Trailing slashes are stripped only from interactively entered values.
     """
-    if not force and config_path.exists():
-        try:
-            data: dict[str, object] = json.loads(config_path.read_text(encoding="utf-8"))
-            url_raw = data.get("firefly_url", "")
-            url = str(url_raw).strip() if url_raw else ""
-            if url:
-                return url
-        except (json.JSONDecodeError, KeyError):
-            pass
+    if not force:
+        existing_url = _read_url_from_config(config_path)
+        if existing_url:
+            return existing_url
 
+    url = _prompt_firefly_url(prompt_fn=prompt_fn, validate_fn=validate_fn)
+    _save_firefly_url(config_path, url)
+    return url
+
+
+def _read_url_from_config(config_path: Path) -> str:
+    if not config_path.exists():
+        return ""
+
+    try:
+        data: dict[str, object] = json.loads(config_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, KeyError):
+        return ""
+
+    url_raw = data.get("firefly_url", "")
+    return str(url_raw).strip() if url_raw else ""
+
+
+def _prompt_firefly_url(
+    *,
+    prompt_fn: Callable[[str], str],
+    validate_fn: Callable[[str], bool] | None,
+) -> str:
     while True:
         raw = prompt_fn("Ange Firefly III URL (t.ex. http://truenas.local:30105): ").strip()
         if not raw:
             continue
-        url = raw.rstrip("/")
-        if validate_fn is not None:
-            logging.info("Validerar URL %s...", url)
-            if validate_fn(url):
-                logging.info("URL validerad.")
-                break
-            logging.warning("Validering misslyckades. Försök igen.")
-        else:
-            break
 
+        url = raw.rstrip("/")
+        if not _is_url_valid(url, validate_fn):
+            continue
+        return url
+
+
+def _is_url_valid(url: str, validate_fn: Callable[[str], bool] | None) -> bool:
+    if validate_fn is None:
+        return True
+
+    logging.info("Validerar URL %s...", url)
+    if validate_fn(url):
+        logging.info("URL validerad.")
+        return True
+
+    logging.warning("Validering misslyckades. Försök igen.")
+    return False
+
+
+def _save_firefly_url(config_path: Path, url: str) -> None:
     config: dict[str, object] = {}
     if config_path.exists():
         with contextlib.suppress(json.JSONDecodeError):
             config = json.loads(config_path.read_text(encoding="utf-8"))
+
     config["firefly_url"] = url
     config_path.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
     logging.info("Sparade URL till %s.", config_path)
-    return url
 
 
 def load_api_token(
