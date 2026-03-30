@@ -36,7 +36,7 @@ If a proposed change cannot be clearly expressed as a requirement and use case, 
 
 Tasks are tracked as individual files in `docs/tasks/`. Each file represents one task.
 
-**File naming:** `TASK-001-short-description.md`
+**File naming:** `<TASK-ID>-short-description.md`
 
 **Branch policy:** Each task must be executed on its own dedicated branch. Do not
 commit task-start changes on `main`.
@@ -62,7 +62,7 @@ Use `make branch-task f=<TASK-ID>` to create/switch branch from task metadata.
 **Task file template:**
 
 ```markdown
-# TASK-<NNN> Short description
+# <TASK-ID> Short description
 
 ## Status
 todo | in-progress | done
@@ -94,8 +94,16 @@ then update `Status` to `in-progress` on that branch. When done, update `Status`
 `done` and fill in the `Completion` section with date, a brief summary, and a list of
 all files that were created or modified before committing.
 
+Update `CHANGELOG.md` before the final commit of a task. Follow the Changelog section
+below for style rules. Do not mark the task `done` without a changelog entry.
+
 If task-related work is discovered on `main`, create/switch to the task branch
 immediately and continue there.
+
+**Branch sync before development:** After switching to the task branch and before
+writing any implementation code, check whether the branch is behind `main`. If it is,
+merge `main` into the task branch (`git merge main`) and resolve any conflicts before
+proceeding. This keeps the task branch current and avoids divergence surprises at PR time.
 
 New tasks can be created by the user, by Claude Code, or by another LLM. Claude Code
 should check `docs/tasks/` for open tasks relevant to the current context before starting work.
@@ -238,6 +246,11 @@ show_missing = true
 
 Run: `pytest --cov=src --cov-report=term-missing`
 
+**Coverage non-regression rule:** Total test coverage must not be lower when a task is
+completed than it was when the task was started. Record the coverage percentage at task
+start and verify it at task completion. If coverage has dropped, add tests to recover
+it before marking the task `done`.
+
 ### pre-commit
 
 Used to **automatically run ruff and mypy before every commit**. If any check fails,
@@ -293,6 +306,20 @@ uv run pytest --cov=src --cov-report=term-missing
 ```
 
 Or via Makefile: `make lint && make test`
+
+## Changelog
+
+When updating `CHANGELOG.md`, describe the delivered behavior or system change first,
+not the internal task bookkeeping.
+
+- Write changelog entries in terms of what was added, changed, or fixed for the project.
+- Task IDs such as `<TASK-ID>` may be included for traceability, but only as a suffix or
+  secondary reference.
+- Do not write entries that only say a task was completed; explain the shipped outcome.
+- Prefer concise user- or operator-facing language, for example: `Added web UI CSV upload
+  with per-file validation and feedback (<TASK-ID>).`
+- Group related shipped work into a small number of clear changelog bullets instead of
+  mirroring one bullet per internal task when that would make the changelog noisier.
 
 ## What NOT to do
 

@@ -9,6 +9,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from firefly_bank_importer.bank_formats import get_registered_bank_formats, resolve_bank_format
+from firefly_bank_importer.bank_formats.base import HeaderBankFormat
 
 SEB_REQUIRED = {"Bokföringsdatum", "Text", "Belopp"}
 ICA_REQUIRED = {"Datum", "Text", "Typ", "Belopp"}
@@ -126,3 +127,18 @@ class TestColumnMappingICA:
 
     def test_ica_missing_column_returns_none_during_resolution(self) -> None:
         assert resolve_bank_format(["Datum", "Text", "Belopp"]) is None
+
+
+class TestOptionalHeaderRobustness:
+    def test_missing_optional_transaction_type_header_maps_to_none(self) -> None:
+        custom_format = HeaderBankFormat(
+            name="custom",
+            required_headers=frozenset({"Datum", "Text", "Belopp"}),
+            date_header="Datum",
+            description_header="Text",
+            amount_header="Belopp",
+            transaction_type_header="Typ",
+        )
+
+        mapping = custom_format.build_column_mapping(["Datum", "Text", "Belopp"])
+        assert mapping.transaction_type_idx is None

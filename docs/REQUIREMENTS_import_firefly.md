@@ -169,6 +169,82 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 4. The core importer discovers and uses the package during normal processing.
 - Result: New bank formats can be added by extension rather than by editing core CSV detection logic.
 
+### UC-18: Preview dry-run import in web UI
+- Actor: User
+- Preconditions: One or more import folders are selected and mapped to Firefly accounts in the web UI.
+- Trigger: The user requests a dry-run preview before live import.
+- Main flow:
+1. The web UI validates that each selected folder has a resolved destination account.
+2. The system parses files in selected folders using the existing format resolution and duplicate-date rules.
+3. The system computes a preview summary per folder and total, including candidate transactions, skipped duplicates, date range, and parsing warnings/errors.
+4. The web UI shows the summary and blocks live import when unresolved errors exist.
+- Result: The user can verify what would be imported before executing live import.
+
+### UC-19: Run live import with progress in web UI
+- Actor: User
+- Preconditions: Dry-run preview is completed and contains no blocking errors.
+- Trigger: The user starts live import from the web UI.
+- Main flow:
+1. The web UI starts an asynchronous live-import job for selected folders and mappings.
+2. The backend processes files and transactions while emitting incremental progress updates.
+3. The web UI receives and renders progress updates in near real time.
+4. When the job finishes, the web UI shows a completion summary with imported, skipped, and failed counts.
+- Result: The user can monitor live import execution and outcome without terminal access.
+
+### UC-23: Clear old import logs
+- Actor: User
+- Trigger: The user chooses to clear logs from CLI or web UI.
+- Main flow:
+1. The system lists existing import log files.
+2. The user chooses clear scope (all logs or logs older than N days).
+3. The system asks for confirmation before deletion.
+4. The system deletes selected logs and reports how many files were removed.
+- Result: Log directory can be cleaned without manual file-system operations.
+
+### UC-24: Reduce cognitive complexity in flagged functions
+- Actor: Developer
+- Trigger: Linting fails due to Complexipy cognitive-complexity violations.
+- Main flow:
+1. The developer runs linting and reviews Complexipy failed functions in descending severity.
+2. The developer refactors flagged functions into smaller units while preserving behavior.
+3. The developer validates the refactor with lint and tests.
+- Result: The codebase remains behaviorally stable while meeting complexity gates.
+
+### UC-25: Use current-task Makefile shortcuts
+- Actor: Developer
+- Trigger: The developer is already on a task branch and wants to run stage, commit, or PR workflow without passing `f=<TASK-ID>`.
+- Main flow:
+1. The developer runs a current-task shortcut Make target.
+2. The target resolves the task file from the current branch naming convention.
+3. The target executes stage, commit, or PR logic using metadata in that task file.
+- Result: Task-driven workflow is faster while keeping task files as source of truth.
+
+### UC-15: Configure Firefly URL and token in web UI settings
+- Actor: User
+- Preconditions: The web UI is running and the settings page is accessible.
+- Trigger: The user opens the settings page and submits Firefly URL and API token.
+- Main flow:
+1. The web UI shows the current configured Firefly URL and indicates whether a token is already stored.
+2. The user enters or updates the Firefly URL and API token.
+3. The backend validates the URL by calling Firefly /api/v1/about.
+4. If validation succeeds, the backend persists URL to config.json and token to secrets.json.
+5. The web UI returns a success response.
+- Alternative flow:
+1. If URL validation fails, no values are persisted.
+2. The web UI returns a clear validation error message.
+- Result: Firefly connection settings are managed from the web UI with validation and persistence.
+
+### UC-22: Upload CSV files in web UI
+- Actor: User
+- Preconditions: The web UI is running and at least one import folder exists.
+- Trigger: The user uploads one or more CSV files via the web UI.
+- Main flow:
+1. The user selects target import folder and one or more CSV files.
+2. The system validates file type and supported bank format via CSV headers.
+3. The system stores valid files in the selected import folder.
+4. The system reports per-file result (saved/rejected) with reason.
+- Result: Valid CSV files are placed in import folders without manual filesystem operations.
+
 ## 5. Functional Requirements
 
 ### FR-1 Token loading
@@ -285,6 +361,63 @@ The core importer shall consume bank format packages through a shared contract/i
 ### FR-36 Unsupported format handling in package architecture
 If no bank format package matches a CSV header, the script shall log an unknown-format error and skip the file.
 
+### FR-37 Log cleanup command
+The system shall provide a log-cleanup operation that supports:
+- deleting all import log files, or
+- deleting import log files older than a user-provided retention period in days,
+with explicit confirmation before destructive action.
+
+### FR-38 Web UI dry-run preview API
+The system shall provide a web API endpoint that returns a dry-run preview summary for selected folders and account mappings without creating transactions in Firefly.
+
+### FR-39 Web UI preview content
+The dry-run preview response and UI shall include, at minimum, per-folder and total counts for candidate transactions, duplicate-skipped rows, date range, and parsing/validation warnings.
+
+### FR-40 Live-import guard from preview
+The web UI shall prevent continuing to live import when dry-run preview reports unresolved mapping errors or fatal parsing/validation errors.
+
+### FR-41 Web UI live import job start
+The system shall provide an API endpoint that starts a live-import job asynchronously for selected folders and resolved account mappings.
+
+### FR-42 Web UI live progress stream
+The system shall provide progress updates for running live-import jobs, including job state, current folder/file context, and cumulative imported/skipped/failed counts.
+
+### FR-43 Web UI live import completion summary
+When a live-import job completes, the system shall expose a completion summary containing imported, skipped, and failed totals and any terminal errors.
+
+### FR-44 Web UI upload endpoint
+The system shall provide a web API endpoint that accepts CSV file uploads and a target import folder.
+
+### FR-45 Web UI upload validation
+The upload flow shall validate that uploaded files are CSV and that headers match a supported bank format before saving files.
+
+### FR-46 Web UI upload result feedback
+The upload flow shall return user-visible per-file feedback containing filename, save status, and rejection reason when validation fails.
+
+### FR-47 Web UI settings read
+The web UI settings endpoint (GET /settings) shall return the current Firefly URL from config.json and indicate whether an API token is stored in secrets.json, without returning the token value.
+
+### FR-48 Web UI settings save
+The web UI settings save endpoint (POST /api/settings) shall accept Firefly URL and API token, validate the URL against Firefly /api/v1/about, and persist URL to config.json plus token to secrets.json only on successful validation.
+
+### FR-49 Web UI settings validation failure
+If URL validation fails in the settings save flow, the system shall not modify config.json or secrets.json and shall return an actionable error message.
+
+### FR-50 Web UI settings update
+The settings save flow shall support both first-time setup and updates to existing values; existing URL and token shall be replaced on successful validation.
+
+### FR-51 Cognitive complexity lint gate
+All functions under src/ shall satisfy the repository's Complexipy cognitive-complexity threshold enforced by make lint.
+
+### FR-52 Current-task stage shortcut target
+The Makefile shall provide a stage shortcut target that stages files from the task file inferred from the current task branch, without requiring `f=<TASK-ID>`.
+
+### FR-53 Current-task commit shortcut target
+The Makefile shall provide a commit shortcut target that commits with the message from the task file inferred from the current task branch, without requiring `f=<TASK-ID>`.
+
+### FR-54 Current-task PR shortcut target
+The Makefile shall provide a PR shortcut target that opens a pull request using title/body from the task file inferred from the current task branch, without requiring `f=<TASK-ID>`.
+
 ## 6. Non-Functional Requirements
 
 ### NFR-1 Performance
@@ -314,6 +447,9 @@ The script shall log whether account data came from live discovery or cache, inc
 ### NFR-9 Extensibility of bank formats
 Adding support for a new bank export format should require adding or registering a new format package with minimal or no changes to the core importer workflow.
 
+### NFR-10 Maintainability via bounded complexity
+The project shall keep function-level cognitive complexity bounded to preserve readability, ease of review, and safer incremental changes.
+
 ## 7. Constraints and Assumptions
 - CSV dates are assumed to be in YYYY-MM-DD format.
 - Firefly API is assumed to be reachable via FIREFLY_URL.
@@ -341,6 +477,7 @@ Adding support for a new bank export format should require adding or registering
 - If discovery fails and no cache exists, the script exits with an actionable message.
 - Running with --refresh-accounts creates import folders for all discovered accounts.
 - Created folder names contain no spaces or Swedish characters.
+- The system can clear old log files using explicit user confirmation.
 
 ## 10. Implementation Status
 
@@ -364,6 +501,13 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | UC-12 | Configure Firefly connection on first run | Not implemented |
 | UC-13 | Resolve a bank export format through a format package | Implemented |
 | UC-14 | Add a new bank export format without changing the core importer | Implemented |
+| UC-18 | Preview dry-run import in web UI | Not implemented |
+| UC-19 | Run live import with progress in web UI | Not implemented |
+| UC-22 | Upload CSV files in web UI | Not implemented |
+| UC-23 | Clear old import logs | Not implemented |
+| UC-24 | Reduce cognitive complexity in flagged functions | Implemented |
+| UC-25 | Use current-task Makefile shortcuts | Implemented |
+| UC-24 | Reduce cognitive complexity in flagged functions | Implemented |
 
 ### Functional Requirements
 
@@ -405,6 +549,20 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | FR-34 | Normalized field mapping | Implemented |
 | FR-35 | Shared importer contract for bank formats | Implemented |
 | FR-36 | Unsupported format handling in package architecture | Implemented |
+| FR-37 | Log cleanup command | Not implemented |
+| FR-38 | Web UI dry-run preview API | Not implemented |
+| FR-39 | Web UI preview content | Not implemented |
+| FR-40 | Live-import guard from preview | Not implemented |
+| FR-41 | Web UI live import job start | Not implemented |
+| FR-42 | Web UI live progress stream | Not implemented |
+| FR-43 | Web UI live import completion summary | Not implemented |
+| FR-44 | Web UI upload endpoint | Not implemented |
+| FR-45 | Web UI upload validation | Not implemented |
+| FR-46 | Web UI upload result feedback | Not implemented |
+| FR-51 | Cognitive complexity lint gate | Implemented |
+| FR-52 | Current-task stage shortcut target | Implemented |
+| FR-53 | Current-task commit shortcut target | Implemented |
+| FR-54 | Current-task PR shortcut target | Implemented |
 
 ### Non-Functional Requirements
 
@@ -419,3 +577,4 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | NFR-7 | Cache reliability | Partial — cache is written atomically by Path.write_text but no temp-file swap is used |
 | NFR-8 | Observability for discovery and cache | Implemented |
 | NFR-9 | Extensibility of bank formats | Implemented |
+| NFR-10 | Maintainability via bounded complexity | Implemented |
