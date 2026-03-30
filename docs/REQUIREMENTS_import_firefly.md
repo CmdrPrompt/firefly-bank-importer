@@ -191,6 +191,17 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 4. When the job finishes, the web UI shows a completion summary with imported, skipped, and failed counts.
 - Result: The user can monitor live import execution and outcome without terminal access.
 
+### UC-20: Show import history and logs in web UI
+- Actor: User
+- Trigger: The user opens the web UI to review prior imports.
+- Main flow:
+1. The web UI requests a list of prior import runs.
+2. The backend returns entries with status and timestamp.
+3. The user selects one run to inspect details.
+4. The backend returns detailed log lines for that run.
+5. The web UI renders the detailed logs for troubleshooting.
+- Result: The user can audit and troubleshoot previous imports without manual file access.
+
 ### UC-23: Clear old import logs
 - Actor: User
 - Trigger: The user chooses to clear logs from CLI or web UI.
@@ -418,6 +429,15 @@ The Makefile shall provide a commit shortcut target that commits with the messag
 ### FR-54 Current-task PR shortcut target
 The Makefile shall provide a PR shortcut target that opens a pull request using title/body from the task file inferred from the current task branch, without requiring `f=<TASK-ID>`.
 
+### FR-55 Web UI import history list API
+The system shall provide an API endpoint that returns prior import runs with at least run identifier, status, timestamp, and source log filename.
+
+### FR-56 Web UI import history page
+The system shall provide a web UI page that lists prior import runs with status and timestamp and links each run to a details view.
+
+### FR-57 Web UI per-run log details
+The system shall provide an API endpoint and corresponding web UI page to show detailed log lines for a selected import run.
+
 ## 6. Non-Functional Requirements
 
 ### NFR-1 Performance
@@ -503,6 +523,7 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | UC-14 | Add a new bank export format without changing the core importer | Implemented |
 | UC-18 | Preview dry-run import in web UI | Not implemented |
 | UC-19 | Run live import with progress in web UI | Not implemented |
+| UC-20 | Show import history and logs in web UI | Implemented |
 | UC-22 | Upload CSV files in web UI | Not implemented |
 | UC-23 | Clear old import logs | Not implemented |
 | UC-24 | Reduce cognitive complexity in flagged functions | Implemented |
@@ -563,6 +584,9 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | FR-52 | Current-task stage shortcut target | Implemented |
 | FR-53 | Current-task commit shortcut target | Implemented |
 | FR-54 | Current-task PR shortcut target | Implemented |
+| FR-55 | Web UI import history list API | Implemented |
+| FR-56 | Web UI import history page | Implemented |
+| FR-57 | Web UI per-run log details | Implemented |
 
 ### Non-Functional Requirements
 
