@@ -1,4 +1,4 @@
-.PHONY: all help setup install lint fix stage branch-task stage-task commit-task pr-task test clean
+.PHONY: all help setup install lint fix stage branch-task stage-task commit-task pr-task test clean clean-complexity
 
 TASKS_DIR := docs/tasks
 
@@ -14,7 +14,7 @@ help:
 	@echo "    make install  -- Create venv, install dependencies and activate pre-commit"
 	@echo ""
 	@echo "  Daily use:"
-	@echo "    make lint        -- Run ruff, mypy, bandit, pymarkdown and radon (cognitive complexity)"
+	@echo "    make lint        -- Run ruff, mypy, bandit, pymarkdown and complexipy (cognitive complexity)"
 	@echo "    make fix         -- Auto-fix ruff and pymarkdown issues"
 	@echo "    make stage       -- Auto-fix and re-stage all staged changes (run before git commit)"
 	@echo "    make branch-task -- Create/switch task branch from task file: make branch-task f=TASK-001"
@@ -22,6 +22,7 @@ help:
 	@echo "    make commit-task -- Commit using message from task file: make commit-task f=TASK-001"
 	@echo "    make pr-task     -- Switch to task branch and open GitHub PR: make pr-task f=TASK-001"
 	@echo "    make test        -- Run pytest with coverage"
+	@echo "    make clean-complexity -- Remove complexipy cache and result files"
 	@echo "    make clean       -- Remove venv and cache"
 	@echo ""
 	@echo "  Commit workflow for a task:"
@@ -49,7 +50,7 @@ lint:
 	uv run mypy src/
 	uv run bandit -r src/ -c pyproject.toml
 	uv run pymarkdown --config .pymarkdown scan $(shell find . -name "*.md" -not -path "./.venv/*")
-	uv run radon cc src/ --min C --show-complexity
+	uv run complexipy src/ -mx 15 -s desc -j || (uv run python scripts/explain_complexipy_failures.py --max 15 && exit 1)
 
 ## Auto-fix ruff and pymarkdown issues
 fix:
@@ -147,8 +148,15 @@ pr-task:
 test:
 	uv run pytest --cov=src --cov-report=term-missing
 
+## Remove generated complexipy artifacts
+clean-complexity:
+	rm -rf .complexipy_cache
+	rm -f complexipy_results_*.json
+	@echo "✓ Removed complexipy artifacts"
+
 ## Remove venv and cache
 clean:
+	$(MAKE) clean-complexity
 	rm -rf .venv
 	find . -type d -name "__pycache__" -exec rm -rf {} +
 	find . -type d -name ".mypy_cache" -exec rm -rf {} +

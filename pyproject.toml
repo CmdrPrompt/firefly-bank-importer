@@ -4,7 +4,10 @@ version = "0.1.2"
 description = ""
 requires-python = ">=3.11"
 dependencies = [
+    "fastapi>=0.135.2",
+    "python-multipart>=0.0.22",
     "requests>=2.31",
+    "uvicorn>=0.42.0",
 ]
 
 [project.optional-dependencies]
@@ -17,7 +20,7 @@ dev = [
     "pytest-cov",
     "hypothesis",
     "coverage",
-    "radon",
+    "complexipy",
 ]
 
 [build-system]
@@ -66,5 +69,6 @@ skips = []
 [dependency-groups]
 dev = [
     "bandit>=1.9.4",
+    "httpx>=0.28.1",
     "pymarkdownlnt>=0.9.36",
 ]

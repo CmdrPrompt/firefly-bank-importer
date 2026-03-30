@@ -45,7 +45,7 @@ raised as more test tasks are completed).
 - `tests/unit/test_csv_parsing.py` — created
 - `tests/unit/test_date_parsing.py` — created
 - `tests/unit/test_duplicate_detection.py` — created
-- `pyproject.toml` — modified (hatchling wheel config, hypothesis dev dep, fail_under 80→25, mypy module overrides, radon dev dep)
+- `pyproject.toml` — modified (hatchling wheel config, hypothesis dev dep, fail_under 80→25, mypy module overrides, complexity-check dev dep)
 - `.pre-commit-config.yaml` — modified (added pytest, hypothesis, requests, types-requests as mypy additional_dependencies)
 **Stage:** `git add tests/__init__.py tests/unit/__init__.py tests/unit/conftest.py tests/unit/test_amount_parsing.py tests/unit/test_csv_parsing.py tests/unit/test_date_parsing.py tests/unit/test_duplicate_detection.py pyproject.toml .pre-commit-config.yaml docs/tasks/TASK-001-add-tests-for-existing-functionality.md`
 **Commit:** `git commit -m "Add characterisation tests for date parsing, duplicate detection, CSV parsing and amount parsing"`
