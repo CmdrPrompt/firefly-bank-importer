@@ -128,6 +128,13 @@ class TestNordeaDateNormalisation:
     def test_slash_date_single_digit_month_and_day(self) -> None:
         assert NORDEA_FORMAT.normalise_date("2025/01/05") == "2025-01-05"
 
+    def test_already_iso_date_returned_unchanged(self) -> None:
+        """Regression: split files store ISO dates — normalise_date must not crash on them."""
+        assert NORDEA_FORMAT.normalise_date("2025-01-01") == "2025-01-01"
+
+    def test_already_iso_date_december(self) -> None:
+        assert NORDEA_FORMAT.normalise_date("2025-12-31") == "2025-12-31"
+
     @given(
         year=st.integers(min_value=2000, max_value=2099),
         month=st.integers(min_value=1, max_value=12),
@@ -138,6 +145,16 @@ class TestNordeaDateNormalisation:
         raw = f"{year}/{month:02d}/{day:02d}"
         result = NORDEA_FORMAT.normalise_date(raw)
         assert result == f"{year}-{month:02d}-{day:02d}"
+
+    @given(
+        year=st.integers(min_value=2000, max_value=2099),
+        month=st.integers(min_value=1, max_value=12),
+        day=st.integers(min_value=1, max_value=28),
+    )
+    @settings(max_examples=200)
+    def test_already_iso_date_idempotent(self, year: int, month: int, day: int) -> None:
+        iso = f"{year}-{month:02d}-{day:02d}"
+        assert NORDEA_FORMAT.normalise_date(iso) == iso
 
 
 # ---------------------------------------------------------------------------
