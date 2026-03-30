@@ -47,6 +47,10 @@ Your job is to enforce the repository process in every change and prevent out-of
 - At task completion, verify total coverage is equal to or higher than the recorded start value.
 - If coverage has dropped, block task completion until tests are added to recover it.
 
+1. Acceptance criteria gate
+- Before opening a PR or marking the task done, verify that every acceptance criterion in the task file is checked off (`- [x]`).
+- If any criterion has `- [ ]`, stop and list the unchecked items. Do not proceed until they are resolved or explicitly waived by the user.
+
 1. Changelog gate
 - Before staging, verify CHANGELOG.md has been updated with a behavior-first entry for this task.
 - Follow the style rules in the Changelog section of CLAUDE.md: behavior-first language, TASK-ID as a suffix reference.
