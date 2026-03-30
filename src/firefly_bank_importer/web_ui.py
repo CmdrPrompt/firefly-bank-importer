@@ -149,7 +149,7 @@ def _update_date_range(
     current_min: datetime | None, current_max: datetime | None, raw_date: str
 ) -> tuple[datetime | None, datetime | None]:
     try:
-        parsed = datetime.strptime(raw_date[:10], "%Y-%m-%d")
+        parsed = datetime.strptime(raw_date, "%Y-%m-%d")
     except ValueError:
         return current_min, current_max
 
@@ -223,8 +223,10 @@ def _load_web_firefly_settings() -> tuple[str | None, str | None, list[str]]:
     else:
         warnings.append("Ingen API-token hittades; latest-date-kontroll hoppas över.")
 
-    if firefly_url is None or api_token is None:
-        warnings.append("Kunde inte läsa Firefly-inställningar; duplicate-skip uppskattas som 0.")
+    if firefly_url is None:
+        warnings.append("Firefly-URL saknas eller är tom; duplicate-skip hoppas över.")
+    if api_token is None:
+        warnings.append("API-token saknas eller är tom; duplicate-skip hoppas över.")
 
     return firefly_url, api_token, warnings
 
@@ -368,11 +370,13 @@ def _process_preview_csv(
         reader = csv.reader(handle, delimiter=";")
         headers = next(reader, None)
         if headers is None:
+            # En tom fil ger ingen data men blockerar inte live-import (ingen rad att importera).
             preview["warnings"].append(f"{csv_path.name}: filen är tom.")
             return min_date, max_date
 
         bank_format = resolve_bank_format(headers)
         if bank_format is None:
+            # Okänt format blockerar live-import för denna fil (kan inte tolka rader).
             preview["errors"].append(f"{csv_path.name}: okänt CSV-format.")
             return min_date, max_date
 
@@ -975,6 +979,8 @@ def _record_live_import_result(
 def _build_live_import_description(row: list[str], mapping: Any) -> str:
     description_idx = cast(int, mapping.description_idx)
     transaction_type_idx = cast(int | None, mapping.transaction_type_idx)
+    if description_idx >= len(row):
+        return ""
     description = row[description_idx].strip()
     if transaction_type_idx is None or transaction_type_idx >= len(row):
         return description
@@ -1051,6 +1057,7 @@ def _process_live_import_csv(
         reader = csv.reader(handle, delimiter=";")
         headers = next(reader, None)
         if headers is None:
+            # En tom fil ger ingen data men räknas inte som fel — ingen rad misslyckades.
             _record_live_import_warning(jobs, jobs_lock, job_id, f"{csv_path.name}: tom fil.")
             return
 

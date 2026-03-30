@@ -72,7 +72,7 @@ def _read_url_from_config(config_path: Path) -> str:
 
     try:
         data: dict[str, object] = json.loads(config_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, KeyError):
+    except json.JSONDecodeError:
         return ""
 
     url_raw = data.get("firefly_url", "")
@@ -162,7 +162,7 @@ def _read_token_from_secrets(secrets_path: Path) -> str:
 
     try:
         data = json.loads(secrets_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, KeyError):
+    except json.JSONDecodeError:
         return ""
 
     return str(data.get("api_token", "")).strip()

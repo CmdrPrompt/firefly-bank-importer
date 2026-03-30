@@ -1,7 +1,7 @@
 # TASK-030 Kodstädning
 
 ## Status
-todo
+done
 
 ## Description
 Samlar upp mindre kodstädningsuppgifter som inte motiverar egna tasks men som förbättrar
@@ -23,9 +23,17 @@ läsbarhet och korrekthet.
 - [ ] `web_ui.py` rad 1054–1055: tom fil i live import behandlas som varning (konsekvent med dry-run men överraskande) — dokumentera designbeslutet
 
 ## Completion
-**Date:**
-**Summary:**
+
+**Date:** 2026-03-30
+**Summary:** Removed unreachable `KeyError` from two `except`-clauses in `config.py`. Removed dead code `detect_csv_format()` and `_get_csv_indices()` from `import_firefly.py`. In `web_ui.py`: removed silent `[:10]` date slice, replaced misleading catch-all warning with precise per-field messages, added `description_idx` bounds-check, and documented empty-file vs unknown-format design decision with comments. Updated one test that asserted the old warning message.
 **Files changed:**
+
+- `src/firefly_bank_importer/config.py` — modified
+- `src/firefly_bank_importer/import_firefly.py` — modified
+- `src/firefly_bank_importer/web_ui.py` — modified
+- `tests/unit/test_web_ui_file_upload.py` — modified
+- `CHANGELOG.md` — modified
+
 **Branch:** `git checkout -b task/030-code-cleanup`
-**Stage:** `git add docs/tasks/TASK-030-code-cleanup.md`
-**Commit:** `git commit -m "Code cleanup"`
+**Stage:** `make stage-current-task`
+**Commit:** `git commit -m "Clean up dead code, misleading except-clauses, and fragile date parsing"`

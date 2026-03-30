@@ -269,13 +269,6 @@ def parse_amount(raw_amount: str) -> float:
     return float(cleaned)
 
 
-def detect_csv_format(headers: list[str]) -> str:
-    bank_format = resolve_bank_format(headers)
-    if bank_format is None:
-        return "unknown"
-    return bank_format.name
-
-
 def _build_transaction_payload(date: str, description: str, amount: float, account_id: int) -> dict[str, str]:
     if amount < 0:
         return {
@@ -346,16 +339,6 @@ def create_transaction(
         _log_tx_result(response, transaction_type, amount_abs, date, description)
 
     return response, transaction_type, amount_abs
-
-
-def _get_csv_indices(csv_format: str, headers: list[str]) -> tuple[int, int, int, int | None]:
-    resolved = _resolve_column_mapping(headers)
-    if resolved is None:
-        raise ValueError("Unsupported CSV format")
-    resolved_format, mapping = resolved
-    if resolved_format != csv_format:
-        raise ValueError(f"CSV headers do not match requested format: {csv_format}")
-    return mapping.date_idx, mapping.description_idx, mapping.amount_idx, mapping.transaction_type_idx
 
 
 def _collect_pending_rows(
