@@ -59,7 +59,7 @@ Relevant requirements: UC-13, UC-14, FR-32 – FR-36.
 - `CHANGELOG.md` — modified
 - `.pre-commit-config.yaml` — modified (fixed pre-existing complexipy v4.2/v5.2 threshold mismatch)
 
-**Branch:** `task/039-nordea-bank-format`
+**Branch:** `git checkout task/039-nordea-bank-format`
 
 **Stage:** `git add src/firefly_bank_importer/bank_formats/nordea.py src/firefly_bank_importer/bank_formats/base.py src/firefly_bank_importer/bank_formats/__init__.py src/firefly_bank_importer/import_firefly.py tests/unit/test_nordea_format.py tests/unit/test_duplicate_detection.py docs/REQUIREMENTS_import_firefly.md docs/tasks/TASK-039-nordea-bank-format.md CHANGELOG.md`
 
