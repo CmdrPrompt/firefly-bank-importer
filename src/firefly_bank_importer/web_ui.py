@@ -106,6 +106,7 @@ class SettingsSaveResult(TypedDict):
 class RefreshAccountsResult(TypedDict):
     total_accounts: int
     new_folders: int
+    account_names: list[str]
 
 
 class ImportHistoryRun(TypedDict):
@@ -1310,7 +1311,7 @@ def index(request: Request) -> str:
         f"{_render_folder_table(previews)}"
         "<p><a href='/upload'>Ladda upp CSV-filer</a></p>"
         "<p><a href='/history'>Importhistorik &amp; loggar</a></p>"
-        "<p><form method='post' action='/api/refresh-accounts' style='display:inline'>"
+        "<p><form method='post' action='/refresh-accounts' style='display:inline'>"
         "<button type='submit'>Uppdatera konton</button></form></p>"
         "<p><a href='/settings'>Inställningar (Firefly URL &amp; token)</a></p>"
         "</body></html>"
@@ -1370,7 +1371,8 @@ def _perform_refresh_accounts(import_base: Path) -> RefreshAccountsResult:
         if not folder_path.exists():
             folder_path.mkdir(parents=True)
             new_folders += 1
-    return {"total_accounts": len(accounts), "new_folders": new_folders}
+    account_names = [a["name"] for a in accounts]
+    return {"total_accounts": len(accounts), "new_folders": new_folders, "account_names": account_names}
 
 
 @router.post("/api/refresh-accounts")
@@ -1385,6 +1387,34 @@ def api_refresh_accounts(request: Request) -> dict[str, Any]:
             status_code=HTTPStatus.BAD_GATEWAY,
             detail={"error": str(exc)},
         ) from exc
+
+
+def _render_refresh_result_page(result: RefreshAccountsResult) -> str:
+    names_html = "".join(f"<li>{escape(name)}</li>" for name in result["account_names"])
+    return (
+        "<html><head><meta charset='utf-8'><title>Konton uppdaterade</title></head><body>"
+        "<h1>Konton uppdaterade</h1>"
+        f"<p>Hittade <strong>{result['total_accounts']}</strong> konton. "
+        f"<strong>{result['new_folders']}</strong> nya mappar skapades.</p>"
+        f"<ul>{names_html}</ul>"
+        "<p><a href='/'>Tillbaka till startsidan</a></p>"
+        "</body></html>"
+    )
+
+
+@router.post("/refresh-accounts", response_class=HTMLResponse)
+def refresh_accounts_page(request: Request) -> str:
+    import_base = _get_import_base(request)
+    try:
+        result = _perform_refresh_accounts(import_base)
+    except HTTPException:
+        raise
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_GATEWAY,
+            detail={"error": str(exc)},
+        ) from exc
+    return _render_refresh_result_page(result)
 
 
 @router.get("/upload", response_class=HTMLResponse)
