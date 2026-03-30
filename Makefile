@@ -1,4 +1,4 @@
-.PHONY: all help setup install lint fix stage branch-task stage-task commit-task pr-task stage-current-task commit-current-task pr-current-task web test clean
+.PHONY: all help setup install lint fix stage branch-task stage-task commit-task pr-task stage-current-task commit-current-task pr-current-task web test clean clean-complexity
 
 TASKS_DIR := docs/tasks
 
@@ -26,6 +26,7 @@ help:
 	@echo "    make pr-current-task     -- Open PR for the current task branch"
 	@echo "    make web         -- Start firefly-import-web on http://127.0.0.1:8000"
 	@echo "    make test        -- Run pytest with coverage"
+	@echo "    make clean-complexity -- Remove complexipy cache and result files"
 	@echo "    make clean       -- Remove venv and cache"
 	@echo ""
 	@echo "  Commit workflow for a task:"
@@ -53,13 +54,7 @@ lint:
 	uv run mypy src/
 	uv run bandit -r src/ -c pyproject.toml
 	uv run pymarkdown --config .pymarkdown scan $(shell find . -name "*.md" -not -path "./.venv/*" -not -path "./.github/*")
-	@uv run complexipy src/; RESULT=$$?; \
-	if [ $$RESULT -ne 0 ]; then \
-		echo ""; \
-		echo "Refactoring priorities (worst first):"; \
-		uv run complexipy src/ --failed --sort desc 2>&1; \
-	fi; \
-	exit $$RESULT
+	uv run complexipy src/ -mx 15 -s desc -j || (uv run python scripts/explain_complexipy_failures.py --max 15 && exit 1)
 
 ## Auto-fix ruff and pymarkdown issues
 fix:
@@ -188,8 +183,15 @@ web:
 test:
 	uv run pytest --cov=src --cov-report=term-missing
 
+## Remove generated complexipy artifacts
+clean-complexity:
+	rm -rf .complexipy_cache
+	rm -f complexipy_results_*.json
+	@echo "✓ Removed complexipy artifacts"
+
 ## Remove venv and cache
 clean:
+	$(MAKE) clean-complexity
 	rm -rf .venv
 	find . -type d -name "__pycache__" -exec rm -rf {} +
 	find . -type d -name ".mypy_cache" -exec rm -rf {} +
