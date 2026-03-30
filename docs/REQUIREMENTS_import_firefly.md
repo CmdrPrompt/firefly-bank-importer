@@ -230,6 +230,19 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 3. The target executes stage, commit, or PR logic using metadata in that task file.
 - Result: Task-driven workflow is faster while keeping task files as source of truth.
 
+### UC-26: Import a Nordea bank CSV export
+- Actor: User
+- Preconditions: A CSV export from Nordea is placed in an import folder.
+- Trigger: The user runs the import script or triggers import from the web UI.
+- Main flow:
+1. The script opens the CSV file and reads the header row.
+2. The script identifies the Nordea format by matching the header fields `Bokföringsdag`, `Belopp`, and `Rubrik`.
+3. The Nordea format package maps source columns to normalised transaction fields: date (`Bokföringsdag`), amount (`Belopp`), description (`Rubrik`), balance (`Saldo`).
+4. The script normalises the date from `YYYY/MM/DD` to `YYYY-MM-DD`.
+5. The script normalises amounts to US format (decimal point, no thousands separator) for Firefly API compatibility.
+6. The script imports the transactions using the same flow as other supported formats.
+- Result: Nordea transactions are imported into Firefly III on the same basis as SEB and ICA exports.
+
 ### UC-15: Configure Firefly URL and token in web UI settings
 - Actor: User
 - Preconditions: The web UI is running and the settings page is accessible.
@@ -285,13 +298,16 @@ The script shall map folder names to Firefly account IDs using discovered/cached
 The script shall support:
 - SEB format with headers Bokforingsdatum, Text, Belopp.
 - ICA format with headers Datum, Text, Typ, Belopp.
+- Nordea format with headers Bokföringsdag, Belopp, Rubrik.
 Unknown format shall be logged as an error and the file shall not be imported.
 
-### FR-6 Amount parsing
+### FR-6 Amount parsing and normalisation
 The script shall parse Swedish amount variants, including:
 - spaces as thousands separators
 - comma decimals
 - currency suffixes kr or sek (case-insensitive)
+
+Parsed amounts shall be normalised to US format (decimal point, no thousands separator, e.g. `1 234,56` → `1234.56`) before being sent to the Firefly API.
 
 ### FR-7 Transaction type mapping
 Negative amounts shall be created as withdrawal with source_id. Non-negative amounts shall be created as deposit with destination_id.
@@ -491,7 +507,7 @@ Adding support for a new bank export format should require adding or registering
 The project shall keep function-level cognitive complexity bounded to preserve readability, ease of review, and safer incremental changes.
 
 ## 7. Constraints and Assumptions
-- CSV dates are assumed to be in YYYY-MM-DD format.
+- CSV date formats vary by bank format package; each package is responsible for normalising dates to ISO 8601 (YYYY-MM-DD) before passing them to the importer.
 - Firefly API is assumed to be reachable via FIREFLY_URL.
 - The token file must exist and contain a valid Bearer token.
 - Account identification is based on folder names and discovered/cached account metadata, not on CSV metadata.

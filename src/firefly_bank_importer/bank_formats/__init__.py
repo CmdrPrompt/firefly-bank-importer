@@ -2,9 +2,10 @@ from typing import cast
 
 from firefly_bank_importer.bank_formats.base import BankFormat, ColumnMapping
 from firefly_bank_importer.bank_formats.ica import ICA_FORMAT
+from firefly_bank_importer.bank_formats.nordea import NORDEA_FORMAT
 from firefly_bank_importer.bank_formats.seb import SEB_FORMAT
 
-_REGISTERED_BANK_FORMATS = cast(tuple[BankFormat, ...], (SEB_FORMAT, ICA_FORMAT))
+_REGISTERED_BANK_FORMATS = cast(tuple[BankFormat, ...], (SEB_FORMAT, ICA_FORMAT, NORDEA_FORMAT))
 
 
 def get_registered_bank_formats() -> tuple[BankFormat, ...]:

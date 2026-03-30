@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Protocol
 
 
@@ -20,6 +21,8 @@ class BankFormat(Protocol):
 
     def build_column_mapping(self, headers: list[str]) -> ColumnMapping: ...
 
+    def normalise_date(self, raw: str) -> str: ...
+
 
 @dataclass(frozen=True)
 class HeaderBankFormat:
@@ -30,9 +33,14 @@ class HeaderBankFormat:
     amount_header: str
     transaction_type_header: str | None = None
     balance_header: str | None = None
+    date_format: str = field(default="%Y-%m-%d")
 
     def matches(self, headers: list[str]) -> bool:
         return self.required_headers.issubset(set(headers))
+
+    def normalise_date(self, raw: str) -> str:
+        """Convert a raw date string to ISO 8601 (YYYY-MM-DD)."""
+        return datetime.strptime(raw.strip(), self.date_format).strftime("%Y-%m-%d")
 
     def build_column_mapping(self, headers: list[str]) -> ColumnMapping:
         def _optional_index(header: str | None) -> int | None:

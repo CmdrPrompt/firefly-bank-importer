@@ -5,6 +5,7 @@ import logging
 import re
 import sys
 from collections import defaultdict
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 from pathlib import Path
@@ -13,7 +14,7 @@ from typing import Any, TypedDict, cast
 import requests
 
 from firefly_bank_importer.bank_formats import resolve_bank_format
-from firefly_bank_importer.bank_formats.base import ColumnMapping
+from firefly_bank_importer.bank_formats.base import BankFormat, ColumnMapping
 from firefly_bank_importer.config import load_api_token, load_firefly_url
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -186,11 +187,11 @@ def find_account_id(folder_name: str, account_map: dict[str, int]) -> int | None
 MONTHLY_FILE_RE = re.compile(r"^\d{4}-\d{2}\.csv$")
 
 
-def _resolve_column_mapping(headers: list[str]) -> tuple[str, ColumnMapping] | None:
+def _resolve_column_mapping(headers: list[str]) -> tuple[BankFormat, ColumnMapping] | None:
     bank_format = resolve_bank_format(headers)
     if bank_format is None:
         return None
-    return bank_format.name, bank_format.build_column_mapping(headers)
+    return bank_format, bank_format.build_column_mapping(headers)
 
 
 def split_file_in_place(input_file: Path) -> None:
@@ -204,13 +205,15 @@ def split_file_in_place(input_file: Path) -> None:
         if resolved is None:
             logging.warning(f"  Okänt format i {input_file.name}, hoppar över split.")
             return
-        _, mapping = resolved
+        bank_format, mapping = resolved
 
         datum_idx = mapping.date_idx
         belopp_idx = mapping.amount_idx
         saldo_idx = mapping.balance_idx
 
         for row in reader:
+            with contextlib.suppress(ValueError):
+                row[datum_idx] = bank_format.normalise_date(row[datum_idx])
             for idx in (belopp_idx, saldo_idx):
                 if idx is None:
                     continue
@@ -348,18 +351,20 @@ def _collect_pending_rows(
     belopp_idx: int,
     type_idx: int | None,
     latest_date: date | None,
+    normalise_date: Callable[[str], str],
 ) -> tuple[list[PendingTransaction], int]:
     skipped = 0
     pending: list[PendingTransaction] = []
     for row in reader:
-        row_date = datetime.strptime(row[datum_idx], "%Y-%m-%d").date()
+        iso_date = normalise_date(row[datum_idx])
+        row_date = datetime.strptime(iso_date, "%Y-%m-%d").date()
         if latest_date is not None and row_date <= latest_date:
             skipped += 1
             continue
         description = row[text_idx].strip()
         if type_idx is not None:
             description = f"{description} [{row[type_idx].strip()}]"
-        pending.append((row[datum_idx], description, row[belopp_idx]))
+        pending.append((iso_date, description, row[belopp_idx]))
     return pending, skipped
 
 
@@ -423,11 +428,13 @@ def process_csv(
         text_idx = mapping.description_idx
         belopp_idx = mapping.amount_idx
         type_idx = mapping.transaction_type_idx
-        logging.info(f"  Format: {csv_format.upper()}")
+        logging.info(f"  Format: {csv_format.name.upper()}")
         if latest_date is not None:
             logging.info(f"  Senaste i Firefly: {latest_date} (hoppar over <= detta datum)")
 
-        pending, skipped = _collect_pending_rows(reader, datum_idx, text_idx, belopp_idx, type_idx, latest_date)
+        pending, skipped = _collect_pending_rows(
+            reader, datum_idx, text_idx, belopp_idx, type_idx, latest_date, csv_format.normalise_date
+        )
 
     if dry_run:
         for date, description, amount in pending:
