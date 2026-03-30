@@ -134,25 +134,41 @@ def load_api_token(
     3. If neither exists (or *force* is True), prompt using hidden input.
     4. Save the token to *secrets_path* and return it.
     """
-    if token_path is None:
-        token_path = TOKEN_FILE
+    token_path = token_path or TOKEN_FILE
 
     if not force:
-        if secrets_path.exists():
-            try:
-                data = json.loads(secrets_path.read_text(encoding="utf-8"))
-                token = str(data.get("api_token", "")).strip()
-                if token:
-                    return token
-            except (json.JSONDecodeError, KeyError):
-                pass
-
-        if token_path.exists():
-            token = token_path.read_text(encoding="utf-8").strip()
-            if token:
-                return token
+        existing_token = _read_token_from_paths(secrets_path=secrets_path, token_path=token_path)
+        if existing_token:
+            return existing_token
 
     token = prompt_fn("Ange Firefly III API-token: ").strip()
+    _save_api_token(secrets_path, token)
+    return token
+
+
+def _read_token_from_paths(*, secrets_path: Path, token_path: Path) -> str:
+    token_from_secrets = _read_token_from_secrets(secrets_path)
+    if token_from_secrets:
+        return token_from_secrets
+
+    if not token_path.exists():
+        return ""
+    return token_path.read_text(encoding="utf-8").strip()
+
+
+def _read_token_from_secrets(secrets_path: Path) -> str:
+    if not secrets_path.exists():
+        return ""
+
+    try:
+        data = json.loads(secrets_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, KeyError):
+        return ""
+
+    return str(data.get("api_token", "")).strip()
+
+
+def _save_api_token(secrets_path: Path, token: str) -> None:
 
     secrets: dict[str, object] = {}
     if secrets_path.exists():
@@ -161,4 +177,3 @@ def load_api_token(
     secrets["api_token"] = token
     secrets_path.write_text(json.dumps(secrets, ensure_ascii=False, indent=2), encoding="utf-8")
     logging.info("Sparade token till %s.", secrets_path)
-    return token
