@@ -13,10 +13,11 @@ Clarify in CLAUDE.md that when multiple tasks are created for a larger initiativ
 
 ## Completion
 **Date:** 2026-03-28
-**Summary:** Added an explicit multi-task initiative workflow to CLAUDE.md that requires creating all task files first and initializing a dedicated branch per task before implementation starts.
+**Summary:** Added an explicit multi-task initiative workflow to CLAUDE.md that requires creating all task files first and initializing a dedicated branch per task before implementation starts. Also included approved requirements updates for log cleanup use case (UC-23 / FR-37) in the same task branch.
 **Files changed:**
 - `CLAUDE.md` — modified
+- `docs/REQUIREMENTS_import_firefly.md` — modified
 - `docs/tasks/TASK-015-clarify-multi-task-branch-init.md` — created
 **Branch:** `git checkout -b task/015-clarify-multi-task-branch-init`
-**Stage:** `git add CLAUDE.md docs/tasks/TASK-015-clarify-multi-task-branch-init.md`
+**Stage:** `git add CLAUDE.md docs/REQUIREMENTS_import_firefly.md docs/tasks/TASK-015-clarify-multi-task-branch-init.md`
 **Commit:** `git commit -m "Clarify multi-task branch initialization workflow"`

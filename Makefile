@@ -1,4 +1,4 @@
-.PHONY: all help setup install lint fix stage branch-task stage-task commit-task pr-task test clean
+.PHONY: all help setup install lint fix stage branch-task stage-task commit-task pr-task stage-current-task commit-current-task pr-current-task web test clean
 
 TASKS_DIR := docs/tasks
 
@@ -14,13 +14,17 @@ help:
 	@echo "    make install  -- Create venv, install dependencies and activate pre-commit"
 	@echo ""
 	@echo "  Daily use:"
-	@echo "    make lint        -- Run ruff, mypy, bandit, pymarkdown and radon (cognitive complexity)"
+	@echo "    make lint        -- Run ruff, mypy, bandit, pymarkdown and complexipy (cognitive complexity)"
 	@echo "    make fix         -- Auto-fix ruff and pymarkdown issues"
 	@echo "    make stage       -- Auto-fix and re-stage all staged changes (run before git commit)"
 	@echo "    make branch-task -- Create/switch task branch from task file: make branch-task f=TASK-001"
 	@echo "    make stage-task  -- Auto-fix and stage files listed in task file: make stage-task f=TASK-001"
 	@echo "    make commit-task -- Commit using message from task file: make commit-task f=TASK-001"
 	@echo "    make pr-task     -- Switch to task branch and open GitHub PR: make pr-task f=TASK-001"
+	@echo "    make stage-current-task  -- Stage files for the current task branch"
+	@echo "    make commit-current-task -- Commit for the current task branch"
+	@echo "    make pr-current-task     -- Open PR for the current task branch"
+	@echo "    make web         -- Start firefly-import-web on http://127.0.0.1:8000"
 	@echo "    make test        -- Run pytest with coverage"
 	@echo "    make clean       -- Remove venv and cache"
 	@echo ""
@@ -48,14 +52,20 @@ lint:
 	uv run ruff format --check .
 	uv run mypy src/
 	uv run bandit -r src/ -c pyproject.toml
-	uv run pymarkdown --config .pymarkdown scan $(shell find . -name "*.md" -not -path "./.venv/*")
-	uv run radon cc src/ --min C --show-complexity
+	uv run pymarkdown --config .pymarkdown scan $(shell find . -name "*.md" -not -path "./.venv/*" -not -path "./.github/*")
+	@uv run complexipy src/; RESULT=$$?; \
+	if [ $$RESULT -ne 0 ]; then \
+		echo ""; \
+		echo "Refactoring priorities (worst first):"; \
+		uv run complexipy src/ --failed --sort desc 2>&1; \
+	fi; \
+	exit $$RESULT
 
 ## Auto-fix ruff and pymarkdown issues
 fix:
 	uv run ruff check --fix .
 	uv run ruff format .
-	uv run pymarkdown --config .pymarkdown fix $(shell find . -name "*.md" -not -path "./.venv/*")
+	uv run pymarkdown --config .pymarkdown fix $(shell find . -name "*.md" -not -path "./.venv/*" -not -path "./.github/*")
 
 ## Auto-fix and re-stage already-staged files (run before git commit)
 stage:
@@ -110,6 +120,24 @@ commit-task:
 	echo "Running: git commit -m \"$$MSG\""; \
 	git commit -m "$$MSG"
 
+## Auto-fix and stage files for the current task branch
+stage-current-task:
+	@CURRENT_BRANCH=$$(git branch --show-current); \
+	TASK_NUM=$$(echo "$$CURRENT_BRANCH" | sed -n 's#^task/\([0-9][0-9][0-9]\)-.*#\1#p'); \
+	[ -n "$$TASK_NUM" ] || (echo "Current branch '$$CURRENT_BRANCH' is not a task branch (expected task/<NNN>-...)"; exit 1); \
+	TASK_ID="TASK-$$TASK_NUM"; \
+	echo "Running: make stage-task f=$$TASK_ID"; \
+	$(MAKE) stage-task f=$$TASK_ID
+
+## Commit using task file metadata for the current task branch
+commit-current-task:
+	@CURRENT_BRANCH=$$(git branch --show-current); \
+	TASK_NUM=$$(echo "$$CURRENT_BRANCH" | sed -n 's#^task/\([0-9][0-9][0-9]\)-.*#\1#p'); \
+	[ -n "$$TASK_NUM" ] || (echo "Current branch '$$CURRENT_BRANCH' is not a task branch (expected task/<NNN>-...)"; exit 1); \
+	TASK_ID="TASK-$$TASK_NUM"; \
+	echo "Running: make commit-task f=$$TASK_ID"; \
+	$(MAKE) commit-task f=$$TASK_ID
+
 ## Open a GitHub PR using task title and description: make pr-task f=TASK-001
 pr-task:
 	@[ -n "$(f)" ] || (echo "Usage: make pr-task f=<task-id-or-filename>"; exit 1)
@@ -142,6 +170,19 @@ pr-task:
 	echo "Creating PR: $$TITLE"; \
 	gh pr create --title "$$TITLE" --body "$$BODY" --base main; \
 	git checkout main
+
+## Open PR using task file metadata for the current task branch
+pr-current-task:
+	@CURRENT_BRANCH=$$(git branch --show-current); \
+	TASK_NUM=$$(echo "$$CURRENT_BRANCH" | sed -n 's#^task/\([0-9][0-9][0-9]\)-.*#\1#p'); \
+	[ -n "$$TASK_NUM" ] || (echo "Current branch '$$CURRENT_BRANCH' is not a task branch (expected task/<NNN>-...)"; exit 1); \
+	TASK_ID="TASK-$$TASK_NUM"; \
+	echo "Running: make pr-task f=$$TASK_ID"; \
+	$(MAKE) pr-task f=$$TASK_ID
+
+## Start web UI
+web:
+	uv run firefly-import-web
 
 ## Run tests with coverage
 test:
