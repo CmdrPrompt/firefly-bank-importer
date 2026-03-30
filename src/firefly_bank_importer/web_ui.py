@@ -4,6 +4,7 @@ import contextlib
 import csv
 import io
 import json
+import re
 import threading
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -34,6 +35,7 @@ from firefly_bank_importer.import_firefly import (
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_IMPORT_BASE = _PROJECT_ROOT / "bankImports"
+_IMPORT_LOG_RE = re.compile(r"^import_(\d{8}_\d{6})\.log$")
 
 
 class AccountCandidate(TypedDict):
@@ -97,6 +99,19 @@ class SettingsRead(TypedDict):
 class SettingsSaveResult(TypedDict):
     success: bool
     error: str | None
+
+
+class ImportHistoryRun(TypedDict):
+    run_id: str
+    filename: str
+    timestamp: str
+    status: str
+    line_count: int
+
+
+class ImportHistoryDetails(TypedDict):
+    run: ImportHistoryRun
+    lines: list[str]
 
 
 UploadFolderForm = Annotated[str, Form(...)]
@@ -739,6 +754,120 @@ def _render_folder_table(previews: list[FolderPreview]) -> str:
     )
 
 
+def _iter_import_log_paths() -> list[Path]:
+    candidates: list[Path] = []
+    for base in (_PROJECT_ROOT / "logs", _PROJECT_ROOT):
+        if not base.exists() or not base.is_dir():
+            continue
+        candidates.extend(path for path in base.glob("import_*.log") if path.is_file())
+
+    # Deduplicate by absolute path in case files appear in both scans.
+    deduped = {path.resolve(): path for path in candidates}
+    return list(deduped.values())
+
+
+def _extract_run_id(path: Path) -> str:
+    match = _IMPORT_LOG_RE.match(path.name)
+    if match is None:
+        return path.stem
+    return match.group(1)
+
+
+def _format_run_timestamp(path: Path) -> str:
+    match = _IMPORT_LOG_RE.match(path.name)
+    if match is None:
+        return datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+    parsed = datetime.strptime(match.group(1), "%Y%m%d_%H%M%S")
+    return parsed.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _infer_run_status(lines: list[str]) -> str:
+    joined = "\n".join(lines)
+    if "Klar!" in joined:
+        return "completed"
+    if "ERROR" in joined or "[FEL]" in joined:
+        return "failed"
+    return "unknown"
+
+
+def _read_import_history_run(path: Path) -> ImportHistoryRun:
+    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    return {
+        "run_id": _extract_run_id(path),
+        "filename": path.name,
+        "timestamp": _format_run_timestamp(path),
+        "status": _infer_run_status(lines),
+        "line_count": len(lines),
+    }
+
+
+def _list_import_history_runs() -> list[ImportHistoryRun]:
+    runs = [_read_import_history_run(path) for path in _iter_import_log_paths()]
+    runs.sort(key=lambda run: run["timestamp"], reverse=True)
+    return runs
+
+
+def _get_import_history_details(run_id: str) -> ImportHistoryDetails | None:
+    for path in _iter_import_log_paths():
+        if _extract_run_id(path) != run_id:
+            continue
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        run: ImportHistoryRun = {
+            "run_id": run_id,
+            "filename": path.name,
+            "timestamp": _format_run_timestamp(path),
+            "status": _infer_run_status(lines),
+            "line_count": len(lines),
+        }
+        return {"run": run, "lines": lines}
+    return None
+
+
+def _render_import_history_page(runs: list[ImportHistoryRun]) -> str:
+    if not runs:
+        return "<h1>Importhistorik</h1><p>Inga importloggar hittades ännu.</p><p><a href='/'>Tillbaka</a></p>"
+
+    rows = "".join(
+        "".join(
+            [
+                "<tr>",
+                f"<td><a href='/history/{escape(run['run_id'])}'>{escape(run['run_id'])}</a></td>",
+                f"<td>{escape(run['timestamp'])}</td>",
+                f"<td>{escape(run['status'])}</td>",
+                f"<td>{run['line_count']}</td>",
+                f"<td>{escape(run['filename'])}</td>",
+                "</tr>",
+            ]
+        )
+        for run in runs
+    )
+    return (
+        "<h1>Importhistorik</h1>"
+        "<table border='1' cellpadding='6' cellspacing='0'>"
+        "<thead><tr><th>Run ID</th><th>Tid</th><th>Status</th><th>Rader</th><th>Fil</th></tr></thead>"
+        f"<tbody>{rows}</tbody>"
+        "</table>"
+        "<p><a href='/'>Tillbaka</a></p>"
+    )
+
+
+def _render_import_history_details_page(details: ImportHistoryDetails) -> str:
+    run = details["run"]
+    log_text = "\n".join(details["lines"])
+    return (
+        "<h1>Importlogg</h1>"
+        f"<p><strong>Run ID:</strong> {escape(run['run_id'])}</p>"
+        f"<p><strong>Tid:</strong> {escape(run['timestamp'])}</p>"
+        f"<p><strong>Status:</strong> {escape(run['status'])}</p>"
+        f"<p><strong>Fil:</strong> {escape(run['filename'])}</p>"
+        "<h2>Detaljerad logg</h2>"
+        "<pre style='white-space:pre-wrap;border:1px solid #ddd;padding:10px;background:#fafafa;'>"
+        f"{escape(log_text)}"
+        "</pre>"
+        "<p><a href='/history'>Tillbaka till historik</a></p>"
+    )
+
+
 def _add_live_import_event(job: LiveImportJob, level: str, message: str) -> None:
     job["events"].append(
         {
@@ -1173,9 +1302,45 @@ def index(request: Request) -> str:
         f"<p>Basmapp: {escape(str(import_base))}</p>"
         f"{_render_folder_table(previews)}"
         "<p><a href='/upload'>Ladda upp CSV-filer</a></p>"
+        "<p><a href='/history'>Importhistorik &amp; loggar</a></p>"
         "<p><a href='/settings'>Inställningar (Firefly URL &amp; token)</a></p>"
         "</body></html>"
     )
+
+
+@router.get("/history", response_class=HTMLResponse)
+def history_page() -> str:
+    runs = _list_import_history_runs()
+    return (
+        "<html><head><meta charset='utf-8'><title>Importhistorik</title></head><body>"
+        f"{_render_import_history_page(runs)}"
+        "</body></html>"
+    )
+
+
+@router.get("/history/{run_id}", response_class=HTMLResponse)
+def history_details_page(run_id: str) -> str:
+    details = _get_import_history_details(run_id)
+    if details is None:
+        raise HTTPException(status_code=404, detail={"error": "Importkörning hittades inte."})
+    return (
+        "<html><head><meta charset='utf-8'><title>Importlogg</title></head><body>"
+        f"{_render_import_history_details_page(details)}"
+        "</body></html>"
+    )
+
+
+@router.get("/api/import-history")
+def api_import_history() -> dict[str, Any]:
+    return {"runs": _list_import_history_runs()}
+
+
+@router.get("/api/import-history/{run_id}")
+def api_import_history_details(run_id: str) -> dict[str, Any]:
+    details = _get_import_history_details(run_id)
+    if details is None:
+        raise HTTPException(status_code=404, detail={"error": "Importkörning hittades inte."})
+    return dict(details)
 
 
 @router.get("/upload", response_class=HTMLResponse)
