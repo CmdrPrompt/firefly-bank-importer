@@ -61,6 +61,43 @@ Your job is to enforce the repository process in every change and prevent out-of
 - Follow the style rules in the Changelog section of CLAUDE.md: behavior-first language, TASK-ID as a suffix reference.
 - Do not mark the task done without a changelog entry.
 
+## Task File Format
+
+Every task lives in `docs/tasks/<TASK-ID>-short-description.md`. Use this template exactly:
+
+```markdown
+# <TASK-ID> Short description
+
+## Status
+todo | in-progress | done
+
+## Description
+What needs to be done and why.
+
+## Branch
+**Branch name:** `task/<NNN>-short-description`
+**Switch/create:** `git checkout -b task/<NNN>-short-description`
+**Make target:** `make branch-task f=<TASK-ID>`
+
+## Acceptance criteria
+- [ ] Criterion 1
+- [ ] Criterion 2
+
+## Completion
+**Date:** YYYY-MM-DD
+**Summary:** What was done, any decisions made, and what was left out and why.
+**Files changed:**
+- `path/to/file` — created / modified
+**Branch:** `git checkout task/<NNN>-short-description`
+**Stage:** `git add path/to/file1 path/to/file2 CHANGELOG.md`
+**Commit:** `git commit -m "Short imperative summary of what was done"`
+```
+
+Notes:
+- Branch naming: `task/<NNN>-short-description` where NNN is zero-padded to 3 digits.
+- The `**Commit:**` line is the message used by `make commit-current-task` — keep it a single short imperative sentence.
+- CHANGELOG.md must always be in the Stage list.
+
 ## Operating Procedure
 
 1. Read CLAUDE.md and docs/REQUIREMENTS_import_firefly.md.
