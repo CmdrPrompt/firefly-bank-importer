@@ -85,5 +85,6 @@ skips = []
 [dependency-groups]
 dev = [
     "bandit>=1.9.4",
+    "pip-audit>=2.9.0",
     "pymarkdownlnt>=0.9.36",
 ]
