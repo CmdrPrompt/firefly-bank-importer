@@ -506,6 +506,9 @@ Adding support for a new bank export format should require adding or registering
 ### NFR-10 Maintainability via bounded complexity
 The project shall keep function-level cognitive complexity bounded to preserve readability, ease of review, and safer incremental changes.
 
+### NFR-11 CI pipeline
+Every pull request against `main` shall automatically run lint, tests, and dependency audit via GitHub Actions. The pipeline shall fail if lint or tests fail, or if any dependency has a known CVE of severity moderate or higher.
+
 ## 7. Constraints and Assumptions
 - CSV date formats vary by bank format package; each package is responsible for normalising dates to ISO 8601 (YYYY-MM-DD) before passing them to the importer.
 - Firefly API is assumed to be reachable via FIREFLY_URL.
@@ -642,3 +645,4 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | NFR-8 | Observability for discovery and cache | Implemented |
 | NFR-9 | Extensibility of bank formats | Implemented |
 | NFR-10 | Maintainability via bounded complexity | Implemented |
+| NFR-11 | CI pipeline | Not implemented |
