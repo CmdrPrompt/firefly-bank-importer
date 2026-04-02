@@ -90,8 +90,8 @@ def test_selection_page_marks_unresolved_folders(tmp_path: Path) -> None:
 
         response = client.get("/selection?folder=unknown_folder_xyz")
         assert response.status_code == 200
-        # Unresolved folders should have warning class
-        assert "unresolved" in response.text or "Ej matchad" in response.text or "diabled" in response.text.lower()
+        assert "unresolved" in response.text
+        assert "⚠ Ej matchad" in response.text
     finally:
         imf.ACCOUNT_CACHE_FILE = orig_cache_path
         cache_file.unlink(missing_ok=True)
