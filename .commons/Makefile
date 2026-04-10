@@ -1,8 +1,16 @@
 .PHONY: all help setup install lint fix stage branch-task stage-task commit-task \
         pr-task merge-pr stage-current-task commit-current-task pr-current-task \
-        merge-current-task test clean clean-complexity
+	merge-current-task test clean clean-complexity generate-governance-files
 
 TASKS_DIR ?= docs/tasks
+PROJECT_NAME ?= firefly-bank-importer
+PROJECT_DESCRIPTION ?= This project imports bank transactions from CSV exports (SEB, ICA, Nordea) into a [Firefly III](https://www.firefly-iii.org/) instance via its REST API.
+REQUIREMENTS_PATH ?= docs/REQUIREMENTS_import_firefly.md
+WORKFLOW_GUARDIAN_NAME ?= Firefly Workflow Guardian
+WORKFLOW_GUARDIAN_REF ?= Workflow Guardian agent (`.github/agents/firefly-workflow-guardian.agent.md`)
+BUG_TRIAGE_NAME ?= Firefly Bug Triage
+PROJECT_MAKE_TARGET ?= make web -- start firefly-import-web on http://127.0.0.1:8000
+GUIDELINES_TITLE ?= Python Development Guidelines
 
 all: help
 
@@ -20,6 +28,9 @@ help:
 	@echo "    make fix      -- Auto-fix ruff and pymarkdown issues"
 	@echo "    make stage    -- Auto-fix and re-stage all staged changes"
 	@echo "    make test     -- Run pytest with coverage"
+	@echo ""
+	@echo "  Governance templates:"
+	@echo "    make generate-governance-files  -- Generate CLAUDE.md and .github/copilot-instructions.md"
 	@echo ""
 	@echo "  Task workflow (explicit task ID):"
 	@echo "    make branch-task f=TASK-001  -- Create/switch to task branch"
@@ -53,7 +64,7 @@ lint:
 	uv run mypy src/
 	uv run bandit -r src/ -c pyproject.toml
 	uv run pymarkdown --config .pymarkdown scan \
-		$(shell find . -name "*.md" -not -path "./.venv/*" -not -path "./.github/*")
+		$(shell find . -name "*.md" -not -path "./.venv/*" -not -path "./.github/*" -not -path "./.commons/.github/*")
 	uv run complexipy src/ -mx 15 -s desc -j || \
 		(uv run python scripts/explain_complexipy_failures.py --max 15 && exit 1)
 
@@ -62,7 +73,7 @@ fix:
 	uv run ruff check --fix .
 	uv run ruff format .
 	uv run pymarkdown --config .pymarkdown fix \
-		$(shell find . -name "*.md" -not -path "./.venv/*" -not -path "./.github/*")
+		$(shell find . -name "*.md" -not -path "./.venv/*" -not -path "./.github/*" -not -path "./.commons/.github/*")
 
 ## Auto-fix and re-stage already-staged files (run before git commit)
 stage:
@@ -70,7 +81,7 @@ stage:
 	uv run ruff check --fix .; \
 	uv run ruff format .; \
 	uv run pymarkdown --config .pymarkdown fix \
-		$$(find . -name "*.md" -not -path "./.venv/*"); \
+		$$(find . -name "*.md" -not -path "./.venv/*" -not -path "./.commons/.github/*"); \
 	[ -n "$$STAGED" ] && echo "$$STAGED" | xargs git add -- || true; \
 	git update-index -q --refresh
 
@@ -98,7 +109,7 @@ stage-task:
 	uv run ruff check --fix .; \
 	uv run ruff format .; \
 	uv run pymarkdown --config .pymarkdown fix \
-		$$(find . -name "*.md" -not -path "./.venv/*"); \
+		$$(find . -name "*.md" -not -path "./.venv/*" -not -path "./.commons/.github/*"); \
 	echo "Running: $$CMD"; \
 	eval "$$CMD"; \
 	git update-index -q --refresh
@@ -177,6 +188,26 @@ merge-current-task:
 ## Run tests with coverage
 test:
 	uv run pytest --cov=src --cov-report=term-missing
+
+## Generate project governance files from .commons templates
+generate-governance-files:
+	@mkdir -p .github
+	@sed \
+		-e 's|{{PROJECT_NAME}}|$(PROJECT_NAME)|g' \
+		-e 's|{{PROJECT_DESCRIPTION}}|$(PROJECT_DESCRIPTION)|g' \
+		-e 's|{{REQUIREMENTS_PATH}}|$(REQUIREMENTS_PATH)|g' \
+		-e 's|{{WORKFLOW_GUARDIAN_NAME}}|$(WORKFLOW_GUARDIAN_NAME)|g' \
+		-e 's|{{BUG_TRIAGE_NAME}}|$(BUG_TRIAGE_NAME)|g' \
+		-e 's|{{PROJECT_MAKE_TARGET}}|$(PROJECT_MAKE_TARGET)|g' \
+		.commons/templates/CLAUDE.md.tmpl > CLAUDE.md
+	@sed \
+		-e 's|{{GUIDELINES_TITLE}}|$(GUIDELINES_TITLE)|g' \
+		-e 's|{{PROJECT_DESCRIPTION}}|$(PROJECT_DESCRIPTION)|g' \
+		-e 's|{{REQUIREMENTS_PATH}}|$(REQUIREMENTS_PATH)|g' \
+		-e 's|{{WORKFLOW_GUARDIAN_REF}}|$(WORKFLOW_GUARDIAN_REF)|g' \
+		-e 's|{{BUG_TRIAGE_NAME}}|$(BUG_TRIAGE_NAME)|g' \
+		.commons/templates/copilot-instructions.md.tmpl > .github/copilot-instructions.md
+	@echo "✓ Generated CLAUDE.md and .github/copilot-instructions.md"
 
 ## Remove generated complexipy artifacts
 clean-complexity:

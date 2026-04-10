@@ -280,6 +280,26 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 4. The system reports per-file result (saved/rejected) with reason.
 - Result: Valid CSV files are placed in import folders without manual filesystem operations.
 
+### UC-27: Bootstrap repository governance from shared .commons
+- Actor: Developer
+- Trigger: A new related project repository is initialized.
+- Main flow:
+1. The developer adds the shared `.commons` subtree to the new repository.
+2. The developer generates `CLAUDE.md` and `.github/copilot-instructions.md` from shared templates.
+3. The developer provides only project-context values (project purpose, requirements path, and optional project-specific make targets).
+4. The generated files are committed as the repository governance baseline.
+- Result: The new repository starts with the same governance rules and only project context differs.
+
+### UC-28: Reuse CI policy through a thin project workflow wrapper
+- Actor: Developer
+- Trigger: A project needs CI that matches shared policy while allowing local context.
+- Main flow:
+1. The repository defines a local `.github/workflows/ci.yml` wrapper workflow.
+2. The wrapper calls a shared reusable workflow from `.commons`-managed infrastructure.
+3. The wrapper passes project-specific parameters (for example Python version and commands) without duplicating policy logic.
+4. Pull requests to `main` execute the shared CI checks through the wrapper.
+- Result: CI behavior remains consistent across projects while preserving per-project configuration.
+
 ## 5. Functional Requirements
 
 ### FR-1 Token loading
@@ -474,6 +494,12 @@ The web UI index page shall expose a "Refresh accounts" button that POSTs to `/r
 ### FR-60 Web UI refresh-accounts result page
 The system shall provide a POST `/refresh-accounts` HTML endpoint that performs account refresh and renders a result page showing total accounts found, each discovered account name, new folders created count, and a link back to the index.
 
+### FR-61 Shared instruction templates
+The repository governance files `CLAUDE.md` and `.github/copilot-instructions.md` shall be generated from shared templates managed in `.commons`, with project context as explicit input values.
+
+### FR-62 Reusable CI invocation
+The repository-level `.github/workflows/ci.yml` shall act as a thin wrapper that invokes a shared reusable CI workflow and forwards project-specific inputs.
+
 ## 6. Non-Functional Requirements
 
 ### NFR-1 Performance
@@ -508,6 +534,9 @@ The project shall keep function-level cognitive complexity bounded to preserve r
 
 ### NFR-11 CI pipeline
 Every pull request against `main` shall automatically run lint, tests, and dependency audit via GitHub Actions. The pipeline shall fail if lint or tests fail, or if any dependency has a known CVE of severity moderate or higher.
+
+### NFR-12 Governance consistency across related projects
+Related projects that consume the same `.commons` baseline shall enforce equivalent workflow and instruction rules, differing only in declared project context.
 
 ## 7. Constraints and Assumptions
 - CSV date formats vary by bank format package; each package is responsible for normalising dates to ISO 8601 (YYYY-MM-DD) before passing them to the importer.

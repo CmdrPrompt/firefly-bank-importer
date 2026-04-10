@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - GitHub Actions CI pipeline: lint, test, and `pip-audit` dependency audit run automatically on every PR to main (TASK-044).
+- Added shared `.commons` governance templates for `CLAUDE.md` and `.github/copilot-instructions.md`, plus a reproducible `make generate-governance-files` workflow that regenerates local project files with source-template headers (TASK-045).
 
 ### Fixed
 - Web UI folder selection test now exercises the happy path by mocking the account cache; unresolved-folder assertion tightened to verify exact CSS class and status text (TASK-043).
