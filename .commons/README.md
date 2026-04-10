@@ -38,6 +38,31 @@ git subtree pull --prefix=.commons \
 | `bug-triage` | Hunts for bugs without fixing them — produces prioritised task files |
 | `characterization-test-writer` | Documents existing untested behavior before refactoring |
 
+## Governance Templates
+
+The `.commons/templates/` folder contains shared templates for:
+
+- `CLAUDE.md`
+- `.github/copilot-instructions.md`
+
+Generate project files from these templates:
+
+```bash
+make generate-governance-files
+```
+
+Override project-context values when needed:
+
+```bash
+make generate-governance-files \
+  PROJECT_NAME="your-project" \
+  PROJECT_DESCRIPTION="Describe your project context." \
+  REQUIREMENTS_PATH="docs/REQUIREMENTS.md" \
+  PROJECT_MAKE_TARGET="make web -- start local web server"
+```
+
+Generated files include a short header comment showing the template source and generation command.
+
 ## Conventions
 
 - Tasks live in `docs/tasks/TASK-<NNN>-short-description.md`
