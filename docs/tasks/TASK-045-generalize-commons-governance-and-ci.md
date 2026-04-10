@@ -22,7 +22,8 @@ explicit context values and a thin local CI wrapper.
 
 ## Completion
 **Date:** 2026-04-10
-**Summary:** Added shared governance templates and a reproducible generation target in `.commons`, regenerated local governance files with template-source headers, and converted CI into a thin reusable-workflow wrapper.
+**Summary:** Added shared governance templates and a reproducible generation target in `.commons`, regenerated local governance files with template-source headers, converted CI into a thin reusable-workflow wrapper, and added a short cross-repo publication checklist reference for TASK-045 follow-through.
+**Cross-repo checklist:** See docs/TASK-045-cross-repo-sync-checklist.md for the exact command-by-command sync flow to python-commons and back.
 **Files changed:**
 - `docs/REQUIREMENTS_import_firefly.md` — modified
 - `.commons/README.md` — modified
@@ -34,6 +35,7 @@ explicit context values and a thin local CI wrapper.
 - `CLAUDE.md` — modified
 - `CHANGELOG.md` — modified
 - `docs/tasks/TASK-045-generalize-commons-governance-and-ci.md` — modified
+- `docs/TASK-045-cross-repo-sync-checklist.md` — added
 **Branch:** `git checkout task/045-generalize-commons-governance-and-ci`
-**Stage:** `git add docs/REQUIREMENTS_import_firefly.md .commons/README.md .commons/Makefile .commons/templates/CLAUDE.md.tmpl .commons/templates/copilot-instructions.md.tmpl .github/workflows/ci.yml .github/copilot-instructions.md CLAUDE.md CHANGELOG.md docs/tasks/TASK-045-generalize-commons-governance-and-ci.md`
+**Stage:** `git add docs/REQUIREMENTS_import_firefly.md .commons/README.md .commons/Makefile .commons/templates/CLAUDE.md.tmpl .commons/templates/copilot-instructions.md.tmpl .github/workflows/ci.yml .github/copilot-instructions.md CLAUDE.md CHANGELOG.md docs/tasks/TASK-045-generalize-commons-governance-and-ci.md docs/TASK-045-cross-repo-sync-checklist.md`
 **Commit:** `git commit -m "Generalize commons governance templates and reusable CI baseline"`
