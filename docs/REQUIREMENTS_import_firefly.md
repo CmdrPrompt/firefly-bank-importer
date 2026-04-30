@@ -517,6 +517,14 @@ The script shall avoid unnecessary duplicate imports when latest-date filtering 
 ### NFR-5 Compatibility
 The script shall run in a Python environment with requests installed.
 
+### NFR-13 HTTP session layer
+
+All HTTP communication with the Firefly III REST API (session management, credential
+headers, account and transaction API calls, connection validation) shall be delegated
+to the `firefly-python-api` library (bundled as a git subtree at
+`libs/firefly-python-api/`). No inline `requests.Session` construction or direct
+Firefly API calls shall exist in `import_firefly.py`, `web_ui.py`, or `config.py`.
+
 ### NFR-6 Startup efficiency
 When a valid cache exists, account resolution should not require network calls during normal imports.
 
@@ -551,6 +559,8 @@ Related projects that consume the same `.commons` baseline shall enforce equival
 - API error during transaction creation: log error with status and truncated response text.
 - Account discovery API failure: log warning/error, then fall back to cache if available.
 - Invalid or corrupted cache file: log error and require refresh/discovery before import.
+- **Path is a file (not a directory):** log error "Ange en mappsökväg, inte en fil." and exit with code 1.
+- **Path does not exist:** create the directory (including parents) and continue normally.
 
 ## 9. Acceptance Criteria
 - Running the script without a path shows usage and exits with error code.

@@ -6,9 +6,9 @@ before the implementation exists.
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import patch
 
-import requests
+from firefly_python_api import FireflyConnectionError
 
 from firefly_bank_importer.config import (
     load_api_token,
@@ -22,30 +22,21 @@ from firefly_bank_importer.config import (
 
 
 class TestValidateFireflyUrl:
-    def test_returns_true_on_200(self) -> None:
-        mock_get = MagicMock()
-        mock_get.return_value.status_code = 200
-        assert validate_firefly_url("http://example.local", get_fn=mock_get) is True
-
-    def test_returns_false_on_non_200(self) -> None:
-        mock_get = MagicMock()
-        mock_get.return_value.status_code = 401
-        assert validate_firefly_url("http://example.local", get_fn=mock_get) is False
+    def test_returns_true_on_successful_connection(self) -> None:
+        with patch("firefly_bank_importer.config.FireflyClient") as mock_cls:
+            mock_cls.return_value.validate_connection.return_value = True
+            assert validate_firefly_url("http://example.local") is True
 
     def test_returns_false_on_connection_error(self) -> None:
-        mock_get = MagicMock(side_effect=requests.ConnectionError)
-        assert validate_firefly_url("http://unreachable.local", get_fn=mock_get) is False
+        with patch("firefly_bank_importer.config.FireflyClient") as mock_cls:
+            mock_cls.return_value.validate_connection.side_effect = FireflyConnectionError("refused")
+            assert validate_firefly_url("http://unreachable.local") is False
 
-    def test_calls_about_endpoint(self) -> None:
-        mock_get = MagicMock()
-        mock_get.return_value.status_code = 200
-        validate_firefly_url("http://example.local:8080", get_fn=mock_get)
-        url = mock_get.call_args[0][0]
-        assert url == "http://example.local:8080/api/v1/about"
-
-    def test_returns_false_on_timeout(self) -> None:
-        mock_get = MagicMock(side_effect=requests.Timeout)
-        assert validate_firefly_url("http://slow.local", get_fn=mock_get) is False
+    def test_passes_url_to_client(self) -> None:
+        with patch("firefly_bank_importer.config.FireflyClient") as mock_cls:
+            mock_cls.return_value.validate_connection.return_value = True
+            validate_firefly_url("http://example.local:8080")
+            mock_cls.assert_called_once_with("http://example.local:8080", "")
 
 
 # ---------------------------------------------------------------------------

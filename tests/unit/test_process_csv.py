@@ -1,7 +1,7 @@
 """Characterisation tests for process_csv().
 
 Documents current behavior as-is. Uses tmp_path for CSV files and
-unittest.mock for the HTTP session so no real API calls are made.
+unittest.mock for the FireflyClient so no real API calls are made.
 """
 
 import csv
@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-import requests
+from firefly_python_api import FireflyClient
 
 import firefly_bank_importer.bank_formats as bank_formats
 import firefly_bank_importer.import_firefly as module
@@ -21,7 +21,6 @@ from tests.unit.dummy_bank_format import DUMMY_FORMAT, DUMMY_HEADERS
 SEB_HEADERS = ["Bokföringsdatum", "Valutadatum", "Verifikationsnummer", "Text", "Belopp", "Saldo"]
 ICA_HEADERS = ["Datum", "Text", "Typ", "Belopp"]
 ACCOUNT_ID = 42
-FIREFLY_URL = "http://test.local:30105"
 
 
 def write_csv(path: Path, headers: list[str], rows: list[list[str]]) -> None:
@@ -31,13 +30,10 @@ def write_csv(path: Path, headers: list[str], rows: list[list[str]]) -> None:
         writer.writerows(rows)
 
 
-def make_session(status_code: int = 201) -> MagicMock:
-    session = MagicMock(spec=requests.Session)
-    mock_response = MagicMock()
-    mock_response.status_code = status_code
-    mock_response.text = ""
-    session.post.return_value = mock_response
-    return session
+def make_client() -> MagicMock:
+    client = MagicMock(spec=FireflyClient)
+    client.create_transaction.return_value = None
+    return client
 
 
 @pytest.fixture(autouse=True)
@@ -62,9 +58,9 @@ class TestDryRunSeb:
             SEB_HEADERS,
             [["2025-01-10", "2025-01-10", "V1", "Shop", "-100,00", "900,00"]],
         )
-        session = make_session()
-        process_csv(session, csv_path, ACCOUNT_ID, FIREFLY_URL, dry_run=True)
-        session.post.assert_not_called()
+        client = make_client()
+        process_csv(client, csv_path, ACCOUNT_ID, dry_run=True)
+        client.create_transaction.assert_not_called()
 
     def test_dry_run_logs_transaction(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         csv_path = tmp_path / "2025-01.csv"
@@ -73,9 +69,9 @@ class TestDryRunSeb:
             SEB_HEADERS,
             [["2025-01-10", "2025-01-10", "V1", "Kaffebar", "-35,00", "900,00"]],
         )
-        session = make_session()
+        client = make_client()
         with caplog.at_level(logging.INFO):
-            process_csv(session, csv_path, ACCOUNT_ID, FIREFLY_URL, dry_run=True)
+            process_csv(client, csv_path, ACCOUNT_ID, dry_run=True)
         assert any("DRY RUN" in r.message for r in caplog.records)
 
     def test_dry_run_logs_correct_count(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
@@ -88,9 +84,9 @@ class TestDryRunSeb:
                 ["2025-01-15", "2025-01-15", "V2", "B", "-20,00", "970,00"],
             ],
         )
-        session = make_session()
+        client = make_client()
         with caplog.at_level(logging.INFO):
-            process_csv(session, csv_path, ACCOUNT_ID, FIREFLY_URL, dry_run=True)
+            process_csv(client, csv_path, ACCOUNT_ID, dry_run=True)
         assert any("2 transaktioner" in r.message for r in caplog.records)
 
 
@@ -102,9 +98,9 @@ class TestDryRunIca:
             ICA_HEADERS,
             [["2025-03-10", "ICA Maxi", "Köp", "-200,00"]],
         )
-        session = make_session()
+        client = make_client()
         with caplog.at_level(logging.INFO):
-            process_csv(session, csv_path, ACCOUNT_ID, FIREFLY_URL, dry_run=True)
+            process_csv(client, csv_path, ACCOUNT_ID, dry_run=True)
         assert any("ICA Maxi [Köp]" in r.message for r in caplog.records)
 
     def test_ica_no_post_calls(self, tmp_path: Path) -> None:
@@ -114,25 +110,25 @@ class TestDryRunIca:
             ICA_HEADERS,
             [["2025-03-10", "Mat", "Köp", "-150,00"]],
         )
-        session = make_session()
-        process_csv(session, csv_path, ACCOUNT_ID, FIREFLY_URL, dry_run=True)
-        session.post.assert_not_called()
+        client = make_client()
+        process_csv(client, csv_path, ACCOUNT_ID, dry_run=True)
+        client.create_transaction.assert_not_called()
 
 
 class TestUnknownFormat:
     def test_no_post_on_unknown_format(self, tmp_path: Path) -> None:
         csv_path = tmp_path / "2025-01.csv"
         write_csv(csv_path, ["Col1", "Col2"], [["val1", "val2"]])
-        session = make_session()
-        process_csv(session, csv_path, ACCOUNT_ID, FIREFLY_URL, dry_run=True)
-        session.post.assert_not_called()
+        client = make_client()
+        process_csv(client, csv_path, ACCOUNT_ID, dry_run=True)
+        client.create_transaction.assert_not_called()
 
     def test_unknown_format_logs_error(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         csv_path = tmp_path / "2025-01.csv"
         write_csv(csv_path, ["Col1", "Col2"], [["val1", "val2"]])
-        session = make_session()
+        client = make_client()
         with caplog.at_level(logging.ERROR):
-            process_csv(session, csv_path, ACCOUNT_ID, FIREFLY_URL)
+            process_csv(client, csv_path, ACCOUNT_ID)
         assert any("Okant CSV-format" in r.message for r in caplog.records)
 
 
@@ -149,10 +145,10 @@ class TestExtensibilityWithRegisteredDummyBank:
             DUMMY_HEADERS,
             [["2025-07-10", "Coffee", "Card", "-45,50", "2 345,00"]],
         )
-        session = make_session()
+        client = make_client()
         with caplog.at_level(logging.INFO):
-            process_csv(session, csv_path, ACCOUNT_ID, FIREFLY_URL, dry_run=True)
-        session.post.assert_not_called()
+            process_csv(client, csv_path, ACCOUNT_ID, dry_run=True)
+        client.create_transaction.assert_not_called()
         assert any("Format: DUMMYBANK" in r.message for r in caplog.records)
         assert any("Coffee [Card]" in r.message for r in caplog.records)
 
@@ -168,9 +164,9 @@ class TestLatestDateFiltering:
                 ["2025-01-15", "2025-01-15", "V2", "B", "-20,00", "970,00"],
             ],
         )
-        session = make_session()
+        client = make_client()
         with caplog.at_level(logging.INFO):
-            process_csv(session, csv_path, ACCOUNT_ID, FIREFLY_URL, dry_run=True, latest_date=None)
+            process_csv(client, csv_path, ACCOUNT_ID, dry_run=True, latest_date=None)
         assert any("2 transaktioner" in r.message for r in caplog.records)
 
     def test_rows_on_or_before_latest_date_skipped(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
@@ -183,17 +179,15 @@ class TestLatestDateFiltering:
                 ["2025-01-15", "2025-01-15", "V2", "New", "-20,00", "970,00"],
             ],
         )
-        session = make_session()
+        client = make_client()
         with caplog.at_level(logging.INFO):
             process_csv(
-                session,
+                client,
                 csv_path,
                 ACCOUNT_ID,
-                FIREFLY_URL,
                 dry_run=True,
                 latest_date=date(2025, 1, 5),
             )
-        # Only the row after latest_date should be processed
         assert any("1 transaktioner" in r.message for r in caplog.records)
 
     def test_row_exactly_on_latest_date_is_skipped(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
@@ -203,13 +197,12 @@ class TestLatestDateFiltering:
             SEB_HEADERS,
             [["2025-01-10", "2025-01-10", "V1", "Exact", "-50,00", "950,00"]],
         )
-        session = make_session()
+        client = make_client()
         with caplog.at_level(logging.INFO):
             process_csv(
-                session,
+                client,
                 csv_path,
                 ACCOUNT_ID,
-                FIREFLY_URL,
                 dry_run=True,
                 latest_date=date(2025, 1, 10),
             )
@@ -225,13 +218,12 @@ class TestLatestDateFiltering:
                 ["2025-01-20", "2025-01-20", "V2", "New", "-20,00", "970,00"],
             ],
         )
-        session = make_session()
+        client = make_client()
         with caplog.at_level(logging.INFO):
             process_csv(
-                session,
+                client,
                 csv_path,
                 ACCOUNT_ID,
-                FIREFLY_URL,
                 dry_run=True,
                 latest_date=date(2025, 1, 10),
             )
@@ -244,13 +236,12 @@ class TestLatestDateFiltering:
             SEB_HEADERS,
             [["2025-01-15", "2025-01-15", "V1", "New", "-10,00", "990,00"]],
         )
-        session = make_session()
+        client = make_client()
         with caplog.at_level(logging.INFO):
             process_csv(
-                session,
+                client,
                 csv_path,
                 ACCOUNT_ID,
-                FIREFLY_URL,
                 dry_run=True,
                 latest_date=date(2025, 1, 10),
             )
@@ -258,7 +249,7 @@ class TestLatestDateFiltering:
 
 
 class TestRealMode:
-    def test_post_called_once_per_transaction(self, tmp_path: Path) -> None:
+    def test_create_transaction_called_once_per_row(self, tmp_path: Path) -> None:
         csv_path = tmp_path / "2025-01.csv"
         write_csv(
             csv_path,
@@ -268,24 +259,23 @@ class TestRealMode:
                 ["2025-01-15", "2025-01-15", "V2", "B", "-20,00", "970,00"],
             ],
         )
-        session = make_session(status_code=201)
-        process_csv(session, csv_path, ACCOUNT_ID, FIREFLY_URL, dry_run=False)
-        assert session.post.call_count == 2
+        client = make_client()
+        process_csv(client, csv_path, ACCOUNT_ID, dry_run=False)
+        assert client.create_transaction.call_count == 2
 
-    def test_post_not_called_when_no_pending(self, tmp_path: Path) -> None:
+    def test_create_transaction_not_called_when_no_pending(self, tmp_path: Path) -> None:
         csv_path = tmp_path / "2025-01.csv"
         write_csv(
             csv_path,
             SEB_HEADERS,
             [["2025-01-10", "2025-01-10", "V1", "Old", "-10,00", "990,00"]],
         )
-        session = make_session()
+        client = make_client()
         process_csv(
-            session,
+            client,
             csv_path,
             ACCOUNT_ID,
-            FIREFLY_URL,
             dry_run=False,
             latest_date=date(2025, 1, 10),
         )
-        session.post.assert_not_called()
+        client.create_transaction.assert_not_called()

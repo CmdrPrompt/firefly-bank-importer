@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Web UI folder selection test now exercises the happy path by mocking the account cache; unresolved-folder assertion tightened to verify exact CSS class and status text (TASK-043).
 
 ### Changed
+
+- All Firefly III HTTP calls (`session management`, `get_asset_accounts`, `get_latest_transaction_date`, `create_transaction`, `validate_connection`) are now delegated to the `firefly-python-api` library, bundled as a git subtree at `libs/firefly-python-api/`. Inline `requests.Session` construction removed from `import_firefly.py`, `web_ui.py`, and `config.py` (TASK-046).
 - Removed unreachable `KeyError` from `except`-clauses in `config.py` — `json.loads()` never raises `KeyError` (TASK-030).
 - Removed dead code `detect_csv_format()` and `_get_csv_indices()` from `import_firefly.py` — neither function was called (TASK-030).
 - Removed silent `[:10]`-slice before `strptime` in `web_ui.py` — date strings are now parsed strictly as `YYYY-MM-DD` (TASK-030).

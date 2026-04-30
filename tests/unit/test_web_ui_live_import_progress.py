@@ -5,16 +5,11 @@ from datetime import date
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from firefly_python_api import FireflyConnectionError
 from pytest import MonkeyPatch
 
 import firefly_bank_importer.web_ui as web_ui
 from firefly_bank_importer.web_ui import create_app
-
-
-class _DummyResponse:
-    def __init__(self, status_code: int, text: str = "ok") -> None:
-        self.status_code = status_code
-        self.text = text
 
 
 def _write_csv(path: Path, rows: list[list[str]]) -> None:
@@ -45,8 +40,8 @@ def test_live_import_start_and_status_completion(tmp_path: Path, monkeypatch: Mo
     )
     monkeypatch.setattr(web_ui, "get_latest_transaction_date", lambda *_args, **_kwargs: date(2026, 4, 5))
 
-    def _fake_create_transaction(*_args: object, **_kwargs: object) -> tuple[_DummyResponse, str, float]:
-        return _DummyResponse(201), "withdrawal", 50.0
+    def _fake_create_transaction(*_args: object, **_kwargs: object) -> tuple[str, float]:
+        return "withdrawal", 50.0
 
     monkeypatch.setattr(web_ui, "create_transaction", _fake_create_transaction)
 
@@ -174,21 +169,20 @@ def test_live_import_collects_multiple_row_level_failures(tmp_path: Path, monkey
     monkeypatch.setattr(web_ui, "get_latest_transaction_date", lambda *_args, **_kwargs: None)
 
     def _fake_create_transaction(
-        _session: object,
+        _client: object,
         _date_value: str,
         description: str,
         _amount: str,
         _account_id: int,
-        _firefly_url: str,
         **_kwargs: object,
-    ) -> tuple[_DummyResponse, str, float] | None:
+    ) -> tuple[str, float] | None:
         if description == "Raise [Kort]":
             raise ValueError("boom")
         if description == "NoneResult [Kort]":
             return None
         if description == "ApiFail [Kort]":
-            return _DummyResponse(500, "api fail"), "withdrawal", 10.0
-        return _DummyResponse(201), "withdrawal", 10.0
+            raise FireflyConnectionError("500 api fail")
+        return "withdrawal", 10.0
 
     monkeypatch.setattr(web_ui, "create_transaction", _fake_create_transaction)
 
@@ -213,4 +207,4 @@ def test_live_import_collects_multiple_row_level_failures(tmp_path: Path, monkey
     assert "rad saknar obligatoriska kolumner" in joined_events
     assert "ogiltigt datum" in joined_events
     assert "Transaktionsfel: boom" in joined_events
-    assert "API-fel: 500 api fail" in joined_events
+    assert "Transaktionsfel: 500 api fail" in joined_events

@@ -12,7 +12,7 @@ import logging
 from collections.abc import Callable
 from pathlib import Path
 
-import requests
+from firefly_python_api import FireflyClient, FireflyConnectionError
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -21,20 +21,16 @@ SECRETS_FILE = _PROJECT_ROOT / "secrets.json"
 TOKEN_FILE = _PROJECT_ROOT / "token"
 
 
-def validate_firefly_url(
-    url: str,
-    *,
-    get_fn: Callable[..., requests.Response] = requests.get,
-) -> bool:
+def validate_firefly_url(url: str) -> bool:
     """Return True if *url* hosts a reachable Firefly III instance.
 
-    Calls ``/api/v1/about`` and returns True when the response is HTTP 200.
-    Returns False on any non-200 status or network error.
+    Delegates to FireflyClient.validate_connection() via GET /api/v1/about.
+    Returns False on any network error or non-2xx response.
     """
     try:
-        response = get_fn(f"{url}/api/v1/about", timeout=10)
-        return bool(response.status_code == 200)
-    except requests.RequestException:
+        result: bool = FireflyClient(url, "").validate_connection()
+        return result
+    except FireflyConnectionError:
         return False
 
 
