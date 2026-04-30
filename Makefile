@@ -1,4 +1,4 @@
-include .commons/Makefile
+include .butler/Makefile
 
 ## Start web UI
 web:
