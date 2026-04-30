@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-import requests
+from firefly_python_api import FireflyClient
 
 import firefly_bank_importer.import_firefly as module
 from firefly_bank_importer.import_firefly import (
@@ -38,13 +38,10 @@ def reset_block(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(module, "BLOCK_TRANSACTION_POSTS", False)
 
 
-def make_session(status_code: int = 201) -> MagicMock:
-    session = MagicMock(spec=requests.Session)
-    response = MagicMock()
-    response.status_code = status_code
-    response.text = ""
-    session.post.return_value = response
-    return session
+def make_client() -> MagicMock:
+    client = MagicMock(spec=FireflyClient)
+    client.create_transaction.return_value = None
+    return client
 
 
 def write_seb_csv(path: Path, rows: list[list[str]]) -> None:
@@ -172,28 +169,27 @@ class TestSplitFileInPlaceEmptyRows:
 class TestCreateTransactionBlock:
     def test_raises_when_blocked(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(module, "BLOCK_TRANSACTION_POSTS", True)
-        session = make_session()
+        client = make_client()
         with pytest.raises(RuntimeError, match="blockerad"):
-            create_transaction(session, "2025-01-10", "Test", "-50,00", ACCOUNT_ID)
+            create_transaction(client, "2025-01-10", "Test", "-50,00", ACCOUNT_ID)
 
 
 class TestCreateTransactionLogTrue:
     def test_returns_tuple_on_success(self) -> None:
-        session = make_session(status_code=201)
-        result = create_transaction(session, "2025-01-10", "Kaffebar", "-35,00", ACCOUNT_ID, log=True)
+        client = make_client()
+        result = create_transaction(client, "2025-01-10", "Kaffebar", "-35,00", ACCOUNT_ID, log=True)
         assert result is not None
-        response, tx_type, amount_abs = result
+        tx_type, amount_abs = result
         assert tx_type == "withdrawal"
         assert amount_abs == pytest.approx(35.0)
 
     def test_logs_ok_line(self, caplog: pytest.LogCaptureFixture) -> None:
-        session = make_session(status_code=201)
+        client = make_client()
         with caplog.at_level(logging.INFO):
-            create_transaction(session, "2025-01-10", "Kaffebar", "-35,00", ACCOUNT_ID, log=True)
+            create_transaction(client, "2025-01-10", "Kaffebar", "-35,00", ACCOUNT_ID, log=True)
         assert any("[OK]" in r.message for r in caplog.records)
 
-    def test_post_called_with_correct_url(self) -> None:
-        session = make_session()
-        create_transaction(session, "2025-01-10", "X", "-10,00", ACCOUNT_ID, log=False)
-        url = session.post.call_args[0][0]
-        assert url.endswith("/api/v1/transactions")
+    def test_client_create_transaction_called(self) -> None:
+        client = make_client()
+        create_transaction(client, "2025-01-10", "X", "-10,00", ACCOUNT_ID, log=False)
+        client.create_transaction.assert_called_once()

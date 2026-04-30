@@ -6,8 +6,8 @@ from pathlib import Path
 
 from fastapi import UploadFile
 from fastapi.testclient import TestClient
+from firefly_python_api import FireflyConnectionError
 from pytest import MonkeyPatch
-from requests import RequestException
 
 import firefly_bank_importer.web_ui as web_ui
 from firefly_bank_importer.web_ui import create_app
@@ -142,10 +142,10 @@ def test_load_web_firefly_settings_reads_valid_config_and_secrets(tmp_path: Path
 def test_fetch_latest_dates_returns_partial_results_and_warning(monkeypatch: MonkeyPatch) -> None:
     monkeypatch.setattr(web_ui, "_load_web_firefly_settings", lambda: ("http://firefly", "token", []))
 
-    def _fake_get_latest_transaction_date(_session: object, account_id: int, _firefly_url: str) -> object:
+    def _fake_get_latest_transaction_date(_client: object, account_id: int) -> object:
         if account_id == 1:
             return date(2026, 3, 10)
-        raise RequestException("network")
+        raise FireflyConnectionError("network")
 
     monkeypatch.setattr(web_ui, "get_latest_transaction_date", _fake_get_latest_transaction_date)
 

@@ -14,9 +14,9 @@ from pathlib import Path
 from typing import Annotated, Any, TypedDict, cast
 from uuid import uuid4
 
-import requests
 from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse
+from firefly_python_api import FireflyClient, FireflyConnectionError
 
 from firefly_bank_importer.bank_formats import resolve_bank_format
 from firefly_bank_importer.config import (
@@ -240,15 +240,14 @@ def _fetch_latest_dates(account_ids: set[int]) -> tuple[dict[int, date], list[st
         return {}, warnings
 
     latest_dates: dict[int, date] = {}
-    session = requests.Session()
-    session.headers.update({"Authorization": f"Bearer {api_token}", "Accept": "application/json"})
+    client = FireflyClient(firefly_url, api_token)
 
     for account_id in account_ids:
         try:
-            latest = get_latest_transaction_date(session, account_id, firefly_url)
+            latest = get_latest_transaction_date(client, account_id)
             if latest is not None:
                 latest_dates[account_id] = latest
-        except (requests.RequestException, ValueError):
+        except (FireflyConnectionError, ValueError):
             warnings.append(f"Kunde inte hämta senaste transaktionsdatum för konto {account_id}.")
 
     return latest_dates, warnings
@@ -964,16 +963,9 @@ def _record_live_import_result(
     jobs: dict[str, LiveImportJob],
     jobs_lock: threading.Lock,
     job_id: str,
-    response: requests.Response,
 ) -> None:
     with jobs_lock:
-        job = jobs[job_id]
-        if response.status_code in (200, 201):
-            job["summary"]["imported"] += 1
-            return
-
-        job["summary"]["failed"] += 1
-        _add_live_import_event(job, "error", f"API-fel: {response.status_code} {response.text[:80]}")
+        jobs[job_id]["summary"]["imported"] += 1
 
 
 def _build_live_import_description(row: list[str], mapping: Any) -> str:
@@ -993,8 +985,7 @@ def _handle_live_import_row(
     mapping: Any,
     latest_date: date | None,
     csv_name: str,
-    session: requests.Session,
-    firefly_url: str,
+    client: FireflyClient,
     account_id: int,
     jobs: dict[str, LiveImportJob],
     jobs_lock: threading.Lock,
@@ -1018,16 +1009,15 @@ def _handle_live_import_row(
     description = _build_live_import_description(row, mapping)
     try:
         result = create_transaction(
-            session,
+            client,
             row_raw_date,
             description,
             row[mapping.amount_idx],
             account_id,
-            firefly_url,
             dry_run=False,
             log=False,
         )
-    except (RuntimeError, ValueError, requests.RequestException) as exc:
+    except (RuntimeError, ValueError, FireflyConnectionError) as exc:
         _record_live_import_error(jobs, jobs_lock, job_id, f"Transaktionsfel: {exc}")
         return
 
@@ -1036,16 +1026,14 @@ def _handle_live_import_row(
             jobs[job_id]["summary"]["failed"] += 1
         return
 
-    response, _transaction_type, _amount_abs = result
-    _record_live_import_result(jobs, jobs_lock, job_id, response)
+    _record_live_import_result(jobs, jobs_lock, job_id)
 
 
 def _process_live_import_csv(
     *,
     csv_path: Path,
     latest_date: date | None,
-    session: requests.Session,
-    firefly_url: str,
+    client: FireflyClient,
     account_id: int,
     jobs: dict[str, LiveImportJob],
     jobs_lock: threading.Lock,
@@ -1073,8 +1061,7 @@ def _process_live_import_csv(
                 mapping=mapping,
                 latest_date=latest_date,
                 csv_name=csv_path.name,
-                session=session,
-                firefly_url=firefly_url,
+                client=client,
                 account_id=account_id,
                 jobs=jobs,
                 jobs_lock=jobs_lock,
@@ -1087,8 +1074,7 @@ def _process_live_import_folder(
     folder_name: str,
     import_base: Path,
     account_map: dict[str, int],
-    session: requests.Session,
-    firefly_url: str,
+    client: FireflyClient,
     jobs: dict[str, LiveImportJob],
     jobs_lock: threading.Lock,
     job_id: str,
@@ -1105,13 +1091,12 @@ def _process_live_import_folder(
         _record_live_import_error(jobs, jobs_lock, job_id, f"Mappen {folder_name} finns inte.")
         return
 
-    latest_date = get_latest_transaction_date(session, account_id, firefly_url)
+    latest_date = get_latest_transaction_date(client, account_id)
     for csv_path in sorted(folder_path.glob("*.csv")):
         _process_live_import_csv(
             csv_path=csv_path,
             latest_date=latest_date,
-            session=session,
-            firefly_url=firefly_url,
+            client=client,
             account_id=account_id,
             jobs=jobs,
             jobs_lock=jobs_lock,
@@ -1123,7 +1108,7 @@ def _prepare_live_import_context(
     jobs: dict[str, LiveImportJob],
     jobs_lock: threading.Lock,
     job_id: str,
-) -> tuple[str, dict[str, int], requests.Session] | None:
+) -> tuple[dict[str, int], FireflyClient] | None:
     firefly_url, api_token, settings_warnings = _load_web_firefly_settings()
     with jobs_lock:
         job = jobs[job_id]
@@ -1152,9 +1137,8 @@ def _prepare_live_import_context(
         return None
 
     account_map = {a["name"]: a["id"] for a in accounts}
-    session = requests.Session()
-    session.headers.update({"Authorization": f"Bearer {api_token}", "Accept": "application/json"})
-    return firefly_url, account_map, session
+    client = FireflyClient(firefly_url, api_token)
+    return account_map, client
 
 
 def _run_live_import_job(
@@ -1176,14 +1160,13 @@ def _run_live_import_job(
         if context is None:
             return
 
-        firefly_url, account_map, session = context
+        account_map, client = context
         for folder_name in folders:
             _process_live_import_folder(
                 folder_name=folder_name,
                 import_base=import_base,
                 account_map=account_map,
-                session=session,
-                firefly_url=firefly_url,
+                client=client,
                 jobs=jobs,
                 jobs_lock=jobs_lock,
                 job_id=job_id,
@@ -1367,9 +1350,8 @@ def _perform_refresh_accounts(import_base: Path) -> RefreshAccountsResult:
             status_code=HTTPStatus.UNPROCESSABLE_ENTITY,
             detail={"error": "Firefly URL och API-token måste konfigureras innan kontoinhämtning."},
         )
-    session = requests.Session()
-    session.headers["Authorization"] = f"Bearer {api_token}"
-    accounts = fetch_accounts_from_firefly(session, firefly_url)
+    client = FireflyClient(firefly_url, api_token)
+    accounts = fetch_accounts_from_firefly(client)
     save_account_cache(accounts)
     new_folders = 0
     for account in accounts:

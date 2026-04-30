@@ -1,7 +1,7 @@
 # TASK-046 Integrate firefly-python-api and replace inline HTTP calls
 
 ## Status
-todo
+done
 
 ## Description
 
@@ -32,14 +32,17 @@ The bank-importer's own interactive credential flow (`load_firefly_url`,
 ## Acceptance criteria
 
 ### Subtree integration
-- [ ] Library added as a git subtree at `libs/firefly-python-api/`:
+- [x] Library added as a git subtree at `libs/firefly-python-api/`:
+
   ```bash
   git subtree add --prefix=libs/firefly-python-api \
     https://github.com/CmdrPrompt/firefly-python-api main --squash
   ```
-- [ ] `pyproject.toml` declares `firefly-python-api` as a dependency with
+
+- [x] `pyproject.toml` declares `firefly-python-api` as a dependency with
   uv local source:
-  ```toml
+  
+```toml
   [project]
   dependencies = [
       ...,
@@ -51,30 +54,30 @@ The bank-importer's own interactive credential flow (`load_firefly_url`,
   ```
 
 ### import_firefly.py
-- [ ] Inline `requests.Session` construction replaced by `FireflyClient`
-- [ ] `fetch_accounts_from_firefly()` uses `client.get_asset_accounts()`
-- [ ] `get_latest_transaction_date()` uses
+- [x] Inline `requests.Session` construction replaced by `FireflyClient`
+- [x] `fetch_accounts_from_firefly()` uses `client.get_asset_accounts()`
+- [x] `get_latest_transaction_date()` uses
   `client.get_latest_transaction_date(account_id)`
-- [ ] `create_transaction()` uses `client.create_transaction(payload)`
+- [x] `create_transaction()` uses `client.create_transaction(payload)`
 
 ### web_ui.py
-- [ ] Inline `requests.Session` construction replaced by `FireflyClient`
-- [ ] Account and transaction calls use the corresponding `FireflyClient` methods
+- [x] Inline `requests.Session` construction replaced by `FireflyClient`
+- [x] Account and transaction calls use the corresponding `FireflyClient` methods
 
 ### config.py
-- [ ] `validate_firefly_url()` delegates to
+- [x] `validate_firefly_url()` delegates to
   `FireflyClient(url, token).validate_connection()` instead of calling
   `requests.get` directly
 
 ### Quality
-- [ ] `docs/REQUIREMENTS_import_firefly.md` updated to note that the HTTP
+- [x] `docs/REQUIREMENTS_import_firefly.md` updated to note that the HTTP
   session layer and all Firefly API calls are delegated to `firefly-python-api`
-- [ ] `make lint && make test` pass
+- [x] `make lint && make test` pass
 
 ## Completion
-**Date:**
-**Summary:**
-**Files changed:**
-**Branch:**
-**Stage:**
-**Commit:**
+**Date:** 2026-04-30
+**Summary:** Lade till `firefly-python-api` som git subtree under `libs/firefly-python-api/` och ersatte alla inline `requests.Session`-konstruktioner och Firefly API-anrop i `import_firefly.py`, `web_ui.py` och `config.py` med motsvarande `FireflyClient`-metoder. Tester uppdaterade för ny signatur och exception-baserad felhantering.
+**Files changed:** pyproject.toml, uv.lock, src/firefly_bank_importer/import_firefly.py, src/firefly_bank_importer/web_ui.py, src/firefly_bank_importer/config.py, docs/REQUIREMENTS_import_firefly.md, CHANGELOG.md, tests/unit/test_build_account_map.py, tests/unit/test_config.py, tests/unit/test_coverage_wins.py, tests/unit/test_date_parsing.py, tests/unit/test_nordea_format.py, tests/unit/test_process_csv.py, tests/unit/test_process_folder.py, tests/unit/test_transaction_payload_log.py, tests/unit/test_web_ui_file_upload.py, tests/unit/test_web_ui_live_import_progress.py
+**Branch:** task/046-integrate-firefly-python-api
+**Stage:** `git add CHANGELOG.md docs/REQUIREMENTS_import_firefly.md docs/tasks/TASK-046-extract-firefly-python-client.md docs/tasks/TASK-048-create-folder-if-not-exists.md pyproject.toml uv.lock src/firefly_bank_importer/config.py src/firefly_bank_importer/import_firefly.py src/firefly_bank_importer/web_ui.py tests/unit/test_build_account_map.py tests/unit/test_config.py tests/unit/test_coverage_wins.py tests/unit/test_date_parsing.py tests/unit/test_nordea_format.py tests/unit/test_process_csv.py tests/unit/test_process_folder.py tests/unit/test_transaction_payload_log.py tests/unit/test_web_ui_file_upload.py tests/unit/test_web_ui_live_import_progress.py`
+**Commit:** `git commit -m "Integrate firefly-python-api as subtree and replace all inline Firefly HTTP calls"`

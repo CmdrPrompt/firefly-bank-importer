@@ -11,7 +11,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, TypedDict, cast
 
-import requests
+from firefly_python_api import FireflyClient, FireflyConnectionError
 
 from firefly_bank_importer.bank_formats import resolve_bank_format
 from firefly_bank_importer.bank_formats.base import BankFormat, ColumnMapping
@@ -48,30 +48,9 @@ def setup_logging() -> str:
     return log_file
 
 
-def fetch_accounts_from_firefly(session: requests.Session, firefly_url: str) -> list[Account]:
-    accounts: list[Account] = []
-    page = 1
-    while True:
-        response = session.get(
-            f"{firefly_url}/api/v1/accounts",
-            params={"type": "asset", "page": str(page)},
-        )
-        if response.status_code != 200:
-            raise RuntimeError(f"Konto-hämtning misslyckades: {response.status_code} {response.text[:100]}")
-        data = cast(dict[str, Any], response.json())
-        for item in data.get("data", []):
-            accounts.append(
-                {
-                    "id": int(item["id"]),
-                    "name": item["attributes"]["name"],
-                    "type": item["attributes"].get("type", "asset"),
-                }
-            )
-        pagination = data.get("meta", {}).get("pagination", {})
-        if page >= pagination.get("total_pages", 1):
-            break
-        page += 1
-    return accounts
+def fetch_accounts_from_firefly(client: FireflyClient) -> list[Account]:
+    raw = client.get_asset_accounts()
+    return [{"id": int(a["id"]), "name": a["name"], "type": "asset"} for a in raw]
 
 
 def save_account_cache(accounts: list[Account]) -> None:
@@ -113,8 +92,7 @@ def load_account_cache() -> list[Account] | None:
 
 
 def build_account_map(
-    session: requests.Session,
-    firefly_url: str,
+    client: FireflyClient,
     refresh: bool = False,
 ) -> tuple[dict[str, int], list[Account]]:
     accounts: list[Account] | None = None
@@ -124,9 +102,9 @@ def build_account_map(
     if accounts is None:
         logging.info("Hämtar konton från Firefly...")
         try:
-            accounts = fetch_accounts_from_firefly(session, firefly_url)
+            accounts = fetch_accounts_from_firefly(client)
             save_account_cache(accounts)
-        except RuntimeError as e:
+        except (RuntimeError, FireflyConnectionError) as e:
             logging.error(str(e))
             if not refresh:
                 accounts = load_account_cache()
@@ -242,26 +220,15 @@ def auto_split_folder(folder: Path) -> None:
             split_file_in_place(f)
 
 
-def get_latest_transaction_date(session: requests.Session, account_id: int, firefly_url: str) -> date | None:
-    response = session.get(
-        f"{firefly_url}/api/v1/accounts/{account_id}/transactions",
-        params={"limit": 1, "page": 1},
-    )
-
-    if response.status_code != 200:
-        logging.warning(f"Kunde inte hamta senaste transaktion for konto {account_id} ({response.status_code}).")
+def get_latest_transaction_date(client: FireflyClient, account_id: int) -> date | None:
+    try:
+        date_str = client.get_latest_transaction_date(str(account_id))
+    except FireflyConnectionError:
+        logging.warning(f"Kunde inte hamta senaste transaktion for konto {account_id}.")
         return None
-
-    data = cast(dict[str, Any], response.json()).get("data", [])
-    if not data:
+    if date_str is None:
         return None
-
-    tx_list = data[0].get("attributes", {}).get("transactions", [])
-    if not tx_list:
-        return None
-
-    latest_date_str = tx_list[0]["date"][:10]
-    return datetime.strptime(latest_date_str, "%Y-%m-%d").date()
+    return datetime.strptime(date_str, "%Y-%m-%d").date()
 
 
 def parse_amount(raw_amount: str) -> float:
@@ -292,32 +259,19 @@ def _build_transaction_payload(date: str, description: str, amount: float, accou
     }
 
 
-def _log_tx_result(
-    response: requests.Response,
-    transaction_type: str,
-    amount_abs: float,
-    date: str,
-    description: str,
-) -> bool:
-    if response.status_code in (200, 201):
-        logging.info(f"  [OK] [{transaction_type}] {amount_abs:.2f} SEK | {date} | {description}")
-        return True
-    logging.error(
-        f"  [FEL] [{transaction_type}] {amount_abs:.2f} SEK | {date} | {description} -> {response.text[:100]}"
-    )
-    return False
+def _log_tx_result(transaction_type: str, amount_abs: float, date: str, description: str) -> None:
+    logging.info(f"  [OK] [{transaction_type}] {amount_abs:.2f} SEK | {date} | {description}")
 
 
 def create_transaction(
-    session: requests.Session,
+    client: FireflyClient,
     date: str,
     description: str,
     amount: str | float,
     account_id: int,
-    firefly_url: str = "",
     dry_run: bool = False,
     log: bool = True,
-) -> tuple[requests.Response, str, float] | None:
+) -> tuple[str, float] | None:
     parsed_amount = parse_amount(str(amount))
     payload = _build_transaction_payload(date, description, parsed_amount, account_id)
     transaction_type = payload["type"]
@@ -336,12 +290,12 @@ def create_transaction(
     if BLOCK_TRANSACTION_POSTS:
         raise RuntimeError("POST av transaktion blockerad eftersom dry-run-skydd är aktivt.")
 
-    response = session.post(f"{firefly_url}/api/v1/transactions", json={"transactions": [payload]})
+    client.create_transaction({"transactions": [payload]})
 
     if log:
-        _log_tx_result(response, transaction_type, amount_abs, date, description)
+        _log_tx_result(transaction_type, amount_abs, date, description)
 
-    return response, transaction_type, amount_abs
+    return transaction_type, amount_abs
 
 
 def _collect_pending_rows(
@@ -369,10 +323,9 @@ def _collect_pending_rows(
 
 
 def _run_threaded_import(
-    session: requests.Session,
+    client: FireflyClient,
     pending: list[PendingTransaction],
     account_id: int,
-    firefly_url: str,
 ) -> None:
     ok = 0
     errors = 0
@@ -382,35 +335,36 @@ def _run_threaded_import(
             futures = [
                 executor.submit(
                     create_transaction,
-                    session,
+                    client,
                     tx_date,
                     desc,
                     amount,
                     account_id,
-                    firefly_url,
                     False,
                     log=False,
                 )
                 for tx_date, desc, amount in batch
             ]
             for fut, (tx_date, desc, _amount) in zip(futures, batch, strict=True):
-                result = fut.result()
+                try:
+                    result = fut.result()
+                except (FireflyConnectionError, RuntimeError, ValueError) as exc:
+                    logging.error(f"  [FEL] {tx_date} | {desc}: {exc}")
+                    errors += 1
+                    continue
                 if result is None:
                     errors += 1
                     continue
-                response, transaction_type, amount_abs = result
-                if _log_tx_result(response, transaction_type, amount_abs, tx_date, desc):
-                    ok += 1
-                else:
-                    errors += 1
+                transaction_type, amount_abs = result
+                _log_tx_result(transaction_type, amount_abs, tx_date, desc)
+                ok += 1
     logging.info(f"  Summa: {ok} ok, {errors} fel")
 
 
 def process_csv(
-    session: requests.Session,
+    client: FireflyClient,
     csv_path: Path,
     account_id: int,
-    firefly_url: str,
     dry_run: bool = False,
     latest_date: date | None = None,
 ) -> None:
@@ -438,20 +392,19 @@ def process_csv(
 
     if dry_run:
         for date, description, amount in pending:
-            create_transaction(session, date, description, amount, account_id, firefly_url, dry_run=True)
+            create_transaction(client, date, description, amount, account_id, dry_run=True)
         logging.info(f"  Summa: {len(pending)} transaktioner")
     else:
-        _run_threaded_import(session, pending, account_id, firefly_url)
+        _run_threaded_import(client, pending, account_id)
 
     if skipped:
         logging.info(f"  Hoppade over: {skipped} rader")
 
 
 def process_folder(
-    session: requests.Session,
+    client: FireflyClient,
     folder: Path,
     account_map: dict[str, int],
-    firefly_url: str,
     dry_run: bool = False,
     ignore_latest_date_check: bool = False,
 ) -> None:
@@ -469,7 +422,7 @@ def process_folder(
 
     latest_date = None
     if not ignore_latest_date_check:
-        latest_date = get_latest_transaction_date(session, account_id, firefly_url)
+        latest_date = get_latest_transaction_date(client, account_id)
 
     logging.info(f"Konto ID {account_id}: {folder.name}")
     if ignore_latest_date_check:
@@ -479,7 +432,7 @@ def process_folder(
 
     for csv_path in csv_files:
         logging.info(f"Bearbetar: {csv_path.name}")
-        process_csv(session, csv_path, account_id, firefly_url, dry_run, latest_date)
+        process_csv(client, csv_path, account_id, dry_run, latest_date)
 
 
 def _parse_cli_args(argv: list[str]) -> tuple[str, bool, bool, bool, bool]:
@@ -531,17 +484,10 @@ def main(
     token = load_api_token(force=configure)
     firefly_url = load_firefly_url(force=configure)
 
-    session = requests.Session()
-    session.headers.update(
-        {
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-        }
-    )
+    client = FireflyClient(firefly_url, token)
 
     base = Path(base_folder)
-    account_map, accounts = build_account_map(session, firefly_url, refresh=refresh_accounts)
+    account_map, accounts = build_account_map(client, refresh=refresh_accounts)
 
     if any(base.glob("*.csv")):
         folders = [base]
@@ -561,7 +507,7 @@ def main(
     logging.info(f"Loggar till: {log_file}")
 
     for folder in folders:
-        process_folder(session, folder, account_map, firefly_url, dry_run, ignore_latest_date_check)
+        process_folder(client, folder, account_map, dry_run, ignore_latest_date_check)
 
     logging.info("Klar!")
     return 0

@@ -3,7 +3,7 @@
 Documents current behavior as-is.
 """
 
-from unittest.mock import MagicMock
+import logging
 
 import pytest
 from hypothesis import given
@@ -92,18 +92,17 @@ class TestBuildTransactionPayloadHypothesis:
 
 
 class TestLogTxResult:
-    def _make_response(self, status_code: int) -> MagicMock:
-        response = MagicMock()
-        response.status_code = status_code
-        response.text = "response body"
-        return response
+    def test_logs_ok_line(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level(logging.INFO):
+            _log_tx_result("withdrawal", 100.0, "2025-01-01", "X")
+        assert any("[OK]" in r.message for r in caplog.records)
 
-    def test_status_200_returns_true(self) -> None:
-        assert _log_tx_result(self._make_response(200), "withdrawal", 100.0, "2025-01-01", "X") is True
+    def test_logs_transaction_type(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level(logging.INFO):
+            _log_tx_result("deposit", 50.0, "2025-01-01", "Salary")
+        assert any("deposit" in r.message for r in caplog.records)
 
-    def test_status_201_returns_true(self) -> None:
-        assert _log_tx_result(self._make_response(201), "deposit", 50.0, "2025-01-01", "X") is True
-
-    @pytest.mark.parametrize("status_code", [400, 404, 422, 500])
-    def test_error_status_returns_false(self, status_code: int) -> None:
-        assert _log_tx_result(self._make_response(status_code), "withdrawal", 10.0, "2025-01-01", "X") is False
+    def test_logs_amount(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level(logging.INFO):
+            _log_tx_result("withdrawal", 42.50, "2025-01-01", "Test")
+        assert any("42.50" in r.message for r in caplog.records)

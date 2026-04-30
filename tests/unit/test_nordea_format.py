@@ -266,9 +266,9 @@ class TestNordeaProcessCsv:
             csv_path,
             [["2026/03/01", "-35,00", "", "", "", "Vardagspaket", "109,77", "SEK"]],
         )
-        session = MagicMock()
+        client = MagicMock()
         with patch("firefly_bank_importer.import_firefly.create_transaction") as mock_create:
-            process_csv(session, csv_path, account_id=1, firefly_url="http://ff", dry_run=True)
+            process_csv(client, csv_path, account_id=1, dry_run=True)
         mock_create.assert_called_once()
 
     def test_nordea_latest_date_skips_old_rows(self, tmp_path: Path) -> None:
@@ -280,13 +280,12 @@ class TestNordeaProcessCsv:
                 ["2026/03/15", "-10,00", "", "", "", "New", "134,77", "SEK"],
             ],
         )
-        session = MagicMock()
+        client = MagicMock()
         with patch("firefly_bank_importer.import_firefly.create_transaction") as mock_create:
             process_csv(
-                session,
+                client,
                 csv_path,
                 account_id=1,
-                firefly_url="http://ff",
                 dry_run=True,
                 latest_date=date(2026, 3, 1),
             )
