@@ -1,71 +1,79 @@
-# python-commons
+# {{PROJECT_NAME}}
 
-Shared infrastructure for Python projects — Makefile targets, and Claude Code agents.
+{{PROJECT_DESCRIPTION}}
 
-## What's included
+## Spec-Driven Development
 
-- **`Makefile`** — task workflow, linting, testing, and git targets built on [uv](https://github.com/astral-sh/uv)
-- **`.github/agents/`** — Claude Code agents for spec-driven, TDD development
+All changes must be grounded in a requirements specification at `{{REQUIREMENTS_PATH}}`.
 
-## Adopting in a project
+Before writing any code for a new feature or change:
 
-Add as a subtree (one-time):
+1. Update `{{REQUIREMENTS_PATH}}` with the relevant requirement(s) and use case(s).
+2. Present the updated text and ask the user: "Is this what you intended?"
+3. Wait for explicit confirmation.
+4. Only then follow the TDD cycle.
 
-```bash
-git subtree add --prefix=.butler \
-  https://github.com/CmdrPrompt/python-commons.git main --squash
-```
+If a change cannot be expressed as a requirement and use case, do not implement it.
 
-Then in your project's `Makefile`:
+## Task Management
 
-```makefile
-include .butler/Makefile
-```
+Tasks live in `docs/tasks/TASK-XXX-short-description.md`. See the {{WORKFLOW_GUARDIAN_NAME}}
+agent (`.github/agents/workflow-guardian.agent.md`) for the task file format and full
+workflow enforcement.
 
-Pull updates later:
+**Branch policy:** Every task runs on its own `task/<NNN>-short-description` branch.
+Never commit implementation work on `main`.
 
-```bash
-git subtree pull --prefix=.butler \
-  https://github.com/CmdrPrompt/python-commons.git main --squash
-```
+**Branch sync:** After switching to the task branch, check if it is behind `main`.
+If it is, run `git merge main` before writing any code.
 
-## Agents
-
-| Agent | Purpose |
-|---|---|
-| `workflow-guardian` | Enforces requirements-first flow, task branches, TDD, and commit discipline |
-| `implementation-worker` | Implements approved work inside the correct task branch |
-| `bug-triage` | Hunts for bugs without fixing them — produces prioritised task files |
-| `characterization-test-writer` | Documents existing untested behavior before refactoring |
-
-## Governance Templates
-
-The `.butler/templates/` folder contains shared templates for:
-
-- `CLAUDE.md`
-- `.github/copilot-instructions.md`
-
-Generate project files from these templates:
+**Task workflow:**
 
 ```bash
-make generate-governance-files
+make branch-task f=TASK-001        # create/switch to task branch
+# implement, then update CHANGELOG.md and task file Completion section
+make stage-current-task            # auto-fix and stage files listed in task file
+git diff --staged                  # optional review
+make commit-current-task           # commit using message from task file — never git commit directly
+make pr-current-task               # open GitHub PR
+make merge-current-task            # squash-merge when ready, pull main
 ```
 
-Override project-context values when needed:
+Or with explicit task ID: `make stage-task f=TASK-001`, `make commit-task`, `make pr-task`.
+
+## Bug Discovery
+
+Use the **{{BUG_TRIAGE_NAME}}** agent (`.github/agents/bug-triage.agent.md`) to hunt for
+bugs without fixing anything. It analyses code against the requirements spec,
+produces a prioritised list, and creates task files for approved bugs.
+
+## TDD
+
+**Red → Green → Refactor.** No exceptions.
+
+- Use **Hypothesis** for all parsing and data transformation functions.
+- Coverage must not drop below the task-start baseline when a task is completed.
+
+## Running the Application
 
 ```bash
-make generate-governance-files \
-  PROJECT_NAME="your-project" \
-  PROJECT_DESCRIPTION="Describe your project context." \
-  REQUIREMENTS_PATH="docs/REQUIREMENTS.md" \
-  PROJECT_MAKE_TARGET="make web -- start local web server"
+{{PROJECT_MAKE_TARGET}}
 ```
 
-Generated files include a short header comment showing the template source and generation command.
+## Changelog
 
-## Conventions
+Describe shipped behavior, not internal task bookkeeping.
 
-- Tasks live in `docs/tasks/TASK-<NNN>-short-description.md`
-- Every task runs on its own `task/<NNN>-short-description` branch
-- Commits via `make commit-current-task` only — never `git commit` directly
-- General workflow rules live in `~/.claude/CLAUDE.md`
+- Behavior-first language: what was added, changed, or fixed.
+- TASK-ID as a suffix reference only.
+- Do not write an entry that only says a task was completed.
+- Group related work into one bullet rather than one bullet per sub-task.
+
+## What NOT to Do
+
+- Do not write code before the requirements spec is confirmed.
+- Do not skip writing tests first (TDD).
+- Do not commit code that fails `make lint` or `make test`.
+- Do not add dependencies without a clear requirement.
+- Do not suppress type errors with `# type: ignore` without explanation.
+- Do not run `git commit` directly on a task branch — always use `make commit-current-task`.
