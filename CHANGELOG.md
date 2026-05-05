@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - CSV files in import folders are now filtered by filename: files containing `konto` or `kontoutdrag` (case-insensitive) are split into monthly files; `YYYY-MM.csv` files are imported directly; any other `.csv` file triggers a warning and is skipped (TASK-049).
+- Import now only processes `YYYY-MM.csv` monthly files; leftover non-monthly CSV files that were not split are no longer imported (TASK-050).
+- Web UI upload rejects files whose name does not contain `konto` or `kontoutdrag`, and the upload form now shows the naming convention (TASK-050).
+- CLI usage message describes the two supported file types: kontoutdrag-fil and YYYY-MM.csv månadsfil (TASK-050).
 - GitHub Actions CI pipeline: lint, test, and `pip-audit` dependency audit run automatically on every PR to main (TASK-044).
 - Added shared `.commons` governance templates for `CLAUDE.md` and `.github/copilot-instructions.md`, plus a reproducible `make generate-governance-files` workflow that regenerates local project files with source-template headers (TASK-045).
 

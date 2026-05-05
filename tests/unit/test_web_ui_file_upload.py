@@ -41,7 +41,7 @@ def test_api_upload_csv_saves_supported_file(tmp_path: Path) -> None:
     response = client.post(
         "/api/upload-csv",
         data={"folder": "kontoutdrag_Test"},
-        files=[("files", ("2026-03.csv", csv_content, "text/csv"))],
+        files=[("files", ("kontoutdrag_2026-03.csv", csv_content, "text/csv"))],
     )
     assert response.status_code == 200
 
@@ -50,7 +50,7 @@ def test_api_upload_csv_saves_supported_file(tmp_path: Path) -> None:
     assert data["rejected_count"] == 0
     assert data["results"][0]["status"] == "saved"
     assert data["results"][0]["detected_format"] == "ica"
-    assert (target_folder / "2026-03.csv").exists()
+    assert (target_folder / "kontoutdrag_2026-03.csv").exists()
 
 
 def test_api_upload_csv_rejects_unsupported_format(tmp_path: Path) -> None:
@@ -66,7 +66,7 @@ def test_api_upload_csv_rejects_unsupported_format(tmp_path: Path) -> None:
     response = client.post(
         "/api/upload-csv",
         data={"folder": "kontoutdrag_Test"},
-        files=[("files", ("bad.csv", csv_content, "text/csv"))],
+        files=[("files", ("kontoutdrag_bad.csv", csv_content, "text/csv"))],
     )
     assert response.status_code == 200
 
@@ -90,12 +90,12 @@ def test_upload_post_returns_feedback_html(tmp_path: Path) -> None:
     response = client.post(
         "/upload",
         data={"folder": "kontoutdrag_Test"},
-        files=[("files", ("2026-04.csv", csv_content, "text/csv"))],
+        files=[("files", ("kontoutdrag_2026-04.csv", csv_content, "text/csv"))],
     )
     assert response.status_code == 200
     assert "Upload-resultat" in response.text
     assert "Sparade filer: 1" in response.text
-    assert "2026-04.csv" in response.text
+    assert "kontoutdrag_2026-04.csv" in response.text
 
 
 def test_load_web_firefly_settings_uses_token_fallback_on_invalid_config(
@@ -180,7 +180,7 @@ def test_api_upload_csv_rejects_multiple_invalid_inputs(tmp_path: Path) -> None:
     import_folder.mkdir()
     target_folder = import_folder / "kontoutdrag_Test"
     target_folder.mkdir()
-    (target_folder / "duplicate.csv").write_text("existing", encoding="utf-8")
+    (target_folder / "kontoutdrag_duplicate.csv").write_text("existing", encoding="utf-8")
 
     app = create_app(import_folder)
     client = TestClient(app)
@@ -190,12 +190,12 @@ def test_api_upload_csv_rejects_multiple_invalid_inputs(tmp_path: Path) -> None:
         data={"folder": "kontoutdrag_Test"},
         files=[
             ("files", ("notes.txt", b"not csv", "text/plain")),
-            ("files", ("bad-utf8.csv", b"\xff\xfe\x00", "text/csv")),
-            ("files", ("empty.csv", b"", "text/csv")),
+            ("files", ("kontoutdrag_bad-utf8.csv", b"\xff\xfe\x00", "text/csv")),
+            ("files", ("konto_empty.csv", b"", "text/csv")),
             (
                 "files",
                 (
-                    "duplicate.csv",
+                    "kontoutdrag_duplicate.csv",
                     b"Datum;Text;Typ;Belopp\n2026-03-01;Mat;Kort;-50,00\n",
                     "text/csv",
                 ),
@@ -209,9 +209,43 @@ def test_api_upload_csv_rejects_multiple_invalid_inputs(tmp_path: Path) -> None:
     assert data["rejected_count"] == 4
     reasons = {item["filename"]: item["reason"] for item in data["results"]}
     assert reasons["notes.txt"] == "Endast .csv-filer stöds."
-    assert reasons["bad-utf8.csv"] == "Filen kunde inte avkodas som UTF-8."
-    assert reasons["empty.csv"] == "Filen är tom."
-    assert reasons["duplicate.csv"] == "Fil med samma namn finns redan i målmappen."
+    assert reasons["kontoutdrag_bad-utf8.csv"] == "Filen kunde inte avkodas som UTF-8."
+    assert reasons["konto_empty.csv"] == "Filen är tom."
+    assert reasons["kontoutdrag_duplicate.csv"] == "Fil med samma namn finns redan i målmappen."
+
+
+def test_upload_form_shows_naming_convention(tmp_path: Path) -> None:
+    import_folder = tmp_path / "bankImports"
+    import_folder.mkdir()
+
+    app = create_app(import_folder)
+    client = TestClient(app)
+
+    response = client.get("/upload")
+    assert response.status_code == 200
+    assert "kontoutdrag" in response.text.lower()
+
+
+def test_api_upload_csv_rejects_unknown_filename(tmp_path: Path) -> None:
+    import_folder = tmp_path / "bankImports"
+    import_folder.mkdir()
+    (import_folder / "kontoutdrag_Test").mkdir()
+
+    app = create_app(import_folder)
+    client = TestClient(app)
+
+    csv_content = b"Datum;Text;Typ;Belopp\n2026-03-01;Mat;Kort;-50,00\n"
+
+    response = client.post(
+        "/api/upload-csv",
+        data={"folder": "kontoutdrag_Test"},
+        files=[("files", ("random-export.csv", csv_content, "text/csv"))],
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["saved_count"] == 0
+    assert data["rejected_count"] == 1
+    assert "konto" in data["results"][0]["reason"].lower()
 
 
 def test_handle_csv_upload_rejects_missing_filename(tmp_path: Path) -> None:

@@ -26,6 +26,7 @@ from firefly_bank_importer.config import (
     validate_firefly_url,
 )
 from firefly_bank_importer.import_firefly import (
+    _KONTOUTDRAG_RE,
     create_transaction,
     fetch_accounts_from_firefly,
     find_account_id,
@@ -588,6 +589,14 @@ def _validate_upload_file(
         _append_rejected_upload(results, filename=safe_name, reason="Endast .csv-filer stöds.")
         return None
 
+    if not _KONTOUTDRAG_RE.search(safe_name):
+        _append_rejected_upload(
+            results,
+            filename=safe_name,
+            reason="Filnamnet måste innehålla 'kontoutdrag' eller 'konto'.",
+        )
+        return None
+
     content = upload.file.read()
     try:
         decoded = content.decode("utf-8-sig")
@@ -669,6 +678,8 @@ def _render_upload_form(previews: list[FolderPreview], message: str | None = Non
     return (
         "<h1>Ladda upp CSV-filer</h1>"
         + (f"<p>{escape(message)}</p>" if message else "")
+        + "<p><small>Filnamnet måste innehålla <strong>kontoutdrag</strong> eller <strong>konto</strong> "
+        + "(t.ex. <em>kontoutdrag_seb.csv</em>, <em>kontoutdrag 20260505.csv</em>).</small></p>"
         + "<form method='post' action='/upload' enctype='multipart/form-data'>"
         + "<p><label>Målmapp: <select name='folder'>"
         + options

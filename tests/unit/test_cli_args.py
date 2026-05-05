@@ -126,6 +126,16 @@ class TestParseCLIArgsConfigureFlag:
         assert configure is False
 
 
+class TestParseCLIArgsHelpText:
+    def test_error_message_mentions_kontoutdrag_file(self) -> None:
+        with pytest.raises(ValueError, match="kontoutdrag"):
+            _parse_cli_args([])
+
+    def test_error_message_mentions_monthly_file(self) -> None:
+        with pytest.raises(ValueError, match=r"\d{4}-\d{2}"):
+            _parse_cli_args([])
+
+
 class TestParseCLIArgsInvalidInput:
     def test_empty_argv_raises_value_error(self) -> None:
         with pytest.raises(ValueError):

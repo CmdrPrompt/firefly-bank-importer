@@ -423,7 +423,7 @@ def process_folder(
 
     auto_split_folder(folder)
 
-    csv_files = sorted(folder.glob("*.csv"))
+    csv_files = sorted(f for f in folder.glob("*.csv") if MONTHLY_FILE_RE.match(f.name))
     if not csv_files:
         logging.warning(f"Inga CSV-filer i {folder.name}, hoppar över.")
         return
@@ -447,7 +447,10 @@ def _parse_cli_args(argv: list[str]) -> tuple[str, bool, bool, bool, bool]:
     if len(argv) < 2:
         raise ValueError(
             "Användning: python3 import_firefly.py <sökväg> "
-            "[--dry-run] [--ignore-latest-date-check] [--refresh-accounts] [--configure]"
+            "[--dry-run] [--ignore-latest-date-check] [--refresh-accounts] [--configure]\n"
+            "  Stödda filtyper i importmappen:\n"
+            "    kontoutdrag-fil — filnamn innehåller 'konto' (t.ex. kontoutdrag_seb.csv, kontoutdrag 20260505.csv)\n"
+            "    månadsfil       — filnamn matchar YYYY-MM.csv (t.ex. 2026-01.csv)"
         )
 
     dry_run = "--dry-run" in argv
