@@ -117,7 +117,7 @@ lint:
 	uv run mypy $(SRC_DIR)/
 	uv run bandit -r $(SRC_DIR)/ -c pyproject.toml
 	uv run pymarkdown --config .pymarkdown scan \
-		$(shell find . -name "*.md" -not -path "./.venv/*" -not -path "./.github/*" -not -path "./.butler/.github/*")
+		$(shell find . -name "*.md" -not -path "./.venv/*" -not -path "./.github/*" -not -path "./.butler/.github/*" -not -path "./libs/*" -not -path "./.claude/*")
 	uv run complexipy $(SRC_DIR)/ -mx 15 -s desc -j || \
 		([ -f scripts/explain_complexipy_failures.py ] && \
 			uv run python scripts/explain_complexipy_failures.py --max 15; exit 1)
@@ -127,7 +127,7 @@ fix:
 	uv run ruff check --fix .
 	uv run ruff format .
 	uv run pymarkdown --config .pymarkdown fix \
-		$(shell find . -name "*.md" -not -path "./.venv/*" -not -path "./.github/*" -not -path "./.butler/.github/*")
+		$(shell find . -name "*.md" -not -path "./.venv/*" -not -path "./.github/*" -not -path "./.butler/.github/*" -not -path "./libs/*" -not -path "./.claude/*")
 
 ## Auto-fix and re-stage already-staged files (run before git commit)
 stage:
@@ -135,7 +135,7 @@ stage:
 	uv run ruff check --fix .; \
 	uv run ruff format .; \
 	uv run pymarkdown --config .pymarkdown fix \
-		$$(find . -name "*.md" -not -path "./.venv/*" -not -path "./.butler/.github/*"); \
+		$$(find . -name "*.md" -not -path "./.venv/*" -not -path "./.butler/.github/*" -not -path "./libs/*" -not -path "./.claude/*"); \
 	[ -n "$$STAGED" ] && echo "$$STAGED" | xargs git add -- || true; \
 	git update-index -q --refresh
 
@@ -163,7 +163,7 @@ stage-task:
 	uv run ruff check --fix .; \
 	uv run ruff format .; \
 	uv run pymarkdown --config .pymarkdown fix \
-		$$(find . -name "*.md" -not -path "./.venv/*" -not -path "./.butler/.github/*"); \
+		$$(find . -name "*.md" -not -path "./.venv/*" -not -path "./.butler/.github/*" -not -path "./libs/*" -not -path "./.claude/*"); \
 	echo "Running: $$CMD"; \
 	eval "$$CMD"; \
 	git update-index -q --refresh
