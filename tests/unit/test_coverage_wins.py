@@ -126,7 +126,7 @@ class TestCreateImportFolders:
 
 class TestAutoSplitFolder:
     def test_non_monthly_file_is_split(self, tmp_path: Path) -> None:
-        src = tmp_path / "export.csv"
+        src = tmp_path / "kontoutdrag_export.csv"
         write_seb_csv(src, [["2025-01-10", "2025-01-10", "V1", "Shop", "-100,00", "900,00"]])
         auto_split_folder(tmp_path)
         assert not src.exists()

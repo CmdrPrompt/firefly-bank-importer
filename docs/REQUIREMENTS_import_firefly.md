@@ -500,6 +500,15 @@ The repository governance files `CLAUDE.md` and `.github/copilot-instructions.md
 ### FR-62 Reusable CI invocation
 The repository-level `.github/workflows/ci.yml` shall act as a thin wrapper that invokes a shared reusable CI workflow and forwards project-specific inputs.
 
+### FR-63 CSV filename filter
+
+When scanning an import folder for CSV files, the script shall recognize exactly two file types:
+
+1. **Bank export file** — the filename (case-insensitive) contains the substring `konto` or `kontoutdrag`. These files are split into monthly files.
+2. **Monthly file** — the filename matches the pattern `YYYY-MM.csv`. These files are imported directly.
+
+A CSV file that matches neither pattern shall be logged as a warning (`WARNING: Okänd filtyp, hoppar över: <filename>`) and shall not be split or imported.
+
 ## 6. Non-Functional Requirements
 
 ### NFR-1 Performance

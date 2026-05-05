@@ -163,6 +163,7 @@ def find_account_id(folder_name: str, account_map: dict[str, int]) -> int | None
 
 
 MONTHLY_FILE_RE = re.compile(r"^\d{4}-\d{2}\.csv$")
+_KONTOUTDRAG_RE = re.compile(r"konto", re.IGNORECASE)
 
 
 def _resolve_column_mapping(headers: list[str]) -> tuple[BankFormat, ColumnMapping] | None:
@@ -213,7 +214,14 @@ def split_file_in_place(input_file: Path) -> None:
 
 
 def auto_split_folder(folder: Path) -> None:
-    to_split = [f for f in folder.glob("*.csv") if not MONTHLY_FILE_RE.match(f.name)]
+    to_split: list[Path] = []
+    for f in folder.glob("*.csv"):
+        if MONTHLY_FILE_RE.match(f.name):
+            continue
+        if _KONTOUTDRAG_RE.search(f.name):
+            to_split.append(f)
+        else:
+            logging.warning(f"Okänd filtyp, hoppar över: {f.name}")
     if to_split:
         logging.info(f"  Splittar {len(to_split)} icke-månadssplittad(e) fil(er)...")
         for f in sorted(to_split):
