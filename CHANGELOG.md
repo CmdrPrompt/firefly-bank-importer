@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
+- CSV files in import folders are now filtered by filename: files containing `konto` or `kontoutdrag` (case-insensitive) are split into monthly files; `YYYY-MM.csv` files are imported directly; any other `.csv` file triggers a warning and is skipped (TASK-049).
 - GitHub Actions CI pipeline: lint, test, and `pip-audit` dependency audit run automatically on every PR to main (TASK-044).
 - Added shared `.commons` governance templates for `CLAUDE.md` and `.github/copilot-instructions.md`, plus a reproducible `make generate-governance-files` workflow that regenerates local project files with source-template headers (TASK-045).
 

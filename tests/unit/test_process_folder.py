@@ -171,7 +171,7 @@ class TestAutoSplitBeforeProcess:
     def test_non_monthly_file_is_split_first(self, tmp_path: Path) -> None:
         folder = tmp_path / "kontoutdrag_SEB_Lonekonto"
         folder.mkdir()
-        src = folder / "export.csv"
+        src = folder / "kontoutdrag_export.csv"
         write_seb_csv(src, [["2025-02-15", "2025-02-15", "V1", "Shop", "-50,00", "950,00"]])
         client = make_client()
         with patch.object(module, "get_latest_transaction_date", return_value=None):

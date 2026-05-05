@@ -1,13 +1,16 @@
 # TASK-048 Skapa mapp om den inte finns; felhantering för filsökväg
 
 ## Status
-todo
+cancelled
 
 ## Description
 
 `firefly-import <sökväg>` kraschar med `os.mkdir`-fel när användaren
 råkar ange en befintlig fil istället för en katalog.  Dessutom saknas stöd
 för att automatiskt skapa en ny katalog om sökvägen inte finns ännu.
+
+**Ersatt av TASK-049** — kravet omdefinierades till ett namnbaserat filfilter
+(FR-63) efter diskussion 2026-05-05.
 
 Implementera de två nya feltillstånden i `main()` i `import_firefly.py`
 (se krav 8 i `docs/REQUIREMENTS_import_firefly.md`):
