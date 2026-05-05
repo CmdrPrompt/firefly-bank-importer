@@ -167,6 +167,33 @@ class TestLatestDateNone:
 # ---------------------------------------------------------------------------
 
 
+class TestOnlyMonthlyFilesImported:
+    def test_unknown_csv_in_folder_is_not_imported(self, tmp_path: Path) -> None:
+        folder = tmp_path / "kontoutdrag_SEB_Lonekonto"
+        folder.mkdir()
+        # Unknown CSV that auto_split warned about and skipped
+        write_seb_csv(folder / "export.csv", [["2025-01-10", "2025-01-10", "V1", "X", "-10,00", "990,00"]])
+        client = make_client()
+        with (
+            patch.object(module, "process_csv") as mock_csv,
+            patch.object(module, "get_latest_transaction_date", return_value=None),
+        ):
+            process_folder(client, folder, ACCOUNT_MAP, dry_run=True)
+        mock_csv.assert_not_called()
+
+    def test_monthly_csv_in_folder_is_imported(self, tmp_path: Path) -> None:
+        folder = tmp_path / "kontoutdrag_SEB_Lonekonto"
+        folder.mkdir()
+        write_seb_csv(folder / "2025-01.csv", [["2025-01-10", "2025-01-10", "V1", "X", "-10,00", "990,00"]])
+        client = make_client()
+        with (
+            patch.object(module, "process_csv") as mock_csv,
+            patch.object(module, "get_latest_transaction_date", return_value=None),
+        ):
+            process_folder(client, folder, ACCOUNT_MAP, dry_run=True)
+        mock_csv.assert_called_once()
+
+
 class TestAutoSplitBeforeProcess:
     def test_non_monthly_file_is_split_first(self, tmp_path: Path) -> None:
         folder = tmp_path / "kontoutdrag_SEB_Lonekonto"
