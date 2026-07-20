@@ -30,6 +30,9 @@ def write_seb_csv(path: Path, rows: list[list[str]]) -> None:
 def make_client() -> MagicMock:
     client = MagicMock(spec=FireflyClient)
     client.create_transaction.return_value = None
+    # Non-zero opening balance so auto-detection (UC-30) doesn't kick in and
+    # these pre-existing characterization tests keep their original behavior.
+    client.get_opening_balance.return_value = {"balance": "100.00", "date": None}
     return client
 
 

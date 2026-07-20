@@ -14,6 +14,7 @@ from firefly_python_api._types import (
     BudgetData,
     BudgetLimitData,
     CategoryData,
+    OpeningBalance,
     TransactionPayload,
     TransactionRead,
 )
@@ -109,6 +110,30 @@ class FireflyClient:
                 body = None
             raise FireflyConnectionError(
                 f"POST {endpoint} failed: unexpected status {response.status_code}",
+                status_code=response.status_code,
+                response_body=body,
+            )
+
+    def _put_expect(
+        self, endpoint: str, payload: dict[str, Any], expected_statuses: tuple[int, ...]
+    ) -> None:
+        """PUT ``payload`` to ``endpoint``; raise unless the response status is in
+        ``expected_statuses``.
+
+        Mirrors :meth:`_post_expect`: any status code outside
+        ``expected_statuses`` raises :class:`FireflyConnectionError`.
+        """
+        try:
+            response = self.session.put(endpoint, json=payload)
+        except requests.RequestException as exc:
+            raise FireflyConnectionError(f"PUT {endpoint} failed: {exc}") from exc
+        if response.status_code not in expected_statuses:
+            try:
+                body = cast(dict[str, Any], response.json())
+            except ValueError:
+                body = None
+            raise FireflyConnectionError(
+                f"PUT {endpoint} failed: unexpected status {response.status_code}",
                 status_code=response.status_code,
                 response_body=body,
             )
@@ -359,6 +384,63 @@ class FireflyClient:
             (including 422 for a duplicate bill name).
         """
         self._post_expect(f"{self.url}/api/v1/bills", dict(payload), (200, 201))
+
+    # ------------------------------------------------------------------
+    # REQ-010 — account opening balance read
+    # ------------------------------------------------------------------
+
+    def get_opening_balance(self, account_id: str) -> OpeningBalance:
+        """Return an account's current opening balance and opening balance date.
+
+        Parameters
+        ----------
+        account_id:
+            Firefly III account ID.
+
+        Returns
+        -------
+        OpeningBalance
+            ``balance`` and ``date`` default to ``None`` when the account has
+            no opening balance set.
+
+        Raises
+        ------
+        FireflyConnectionError
+            On any network error or non-2xx HTTP response (including 404 for
+            an unknown ``account_id``).
+        """
+        attributes = self._get(f"{self.url}/api/v1/accounts/{account_id}")["data"]["attributes"]
+        return OpeningBalance(
+            balance=attributes.get("opening_balance"),
+            date=attributes.get("opening_balance_date"),
+        )
+
+    # ------------------------------------------------------------------
+    # REQ-009 — account opening balance
+    # ------------------------------------------------------------------
+
+    def set_opening_balance(self, account_id: str, balance: str, date: str) -> None:
+        """Set an account's opening balance and opening balance date.
+
+        Parameters
+        ----------
+        account_id:
+            Firefly III account ID.
+        balance:
+            Opening balance amount as a decimal string.
+        date:
+            Opening balance date in ``YYYY-MM-DD`` format.
+
+        Raises
+        ------
+        FireflyConnectionError
+            On any network error or a response status other than 200.
+        """
+        self._put_expect(
+            f"{self.url}/api/v1/accounts/{account_id}",
+            {"opening_balance": balance, "opening_balance_date": date},
+            (200,),
+        )
 
     # ------------------------------------------------------------------
     # REQ-006 — withdrawal transactions
