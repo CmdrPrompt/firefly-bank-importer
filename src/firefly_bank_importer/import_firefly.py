@@ -9,7 +9,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, TypedDict, cast
+from typing import Any, NamedTuple, TypedDict, cast
 
 from firefly_python_api import FireflyClient, FireflyConnectionError
 
@@ -31,6 +31,20 @@ class Account(TypedDict):
 
 
 PendingTransaction = tuple[str, str, str]
+
+
+class PendingRow(NamedTuple):
+    """A parsed CSV row awaiting posting, tagged with its account and bank
+    format so cross-account transfer matching (UC-31) can compare rows from
+    different folders.
+    """
+
+    account_id: int
+    iso_date: str
+    description: str
+    amount: str
+    bank_format: str
+    row_date: date
 
 
 def setup_logging() -> str:
@@ -528,6 +542,223 @@ def process_folder(
         process_csv(client, csv_path, account_id, dry_run, latest_date)
 
 
+def _resolve_folder_account_and_files(folder: Path, account_map: dict[str, int]) -> tuple[int, list[Path]] | None:
+    account_id = find_account_id(folder.name, account_map)
+    if not account_id:
+        logging.warning(f"Inget konto hittat för {folder.name}, hoppar över.")
+        return None
+    auto_split_folder(folder)
+    csv_files = sorted(f for f in folder.glob("*.csv") if MONTHLY_FILE_RE.match(f.name))
+    if not csv_files:
+        logging.warning(f"Inga CSV-filer i {folder.name}, hoppar över.")
+        return None
+    return account_id, csv_files
+
+
+def _compute_latest_date_floor(
+    client: FireflyClient,
+    account_id: int,
+    csv_files: list[Path],
+    dry_run: bool,
+    ignore_latest_date_check: bool,
+) -> date | None:
+    opening_balance_floor = _apply_auto_opening_balance(client, account_id, csv_files, dry_run)
+    latest_date = None
+    if not ignore_latest_date_check:
+        latest_date = get_latest_transaction_date(client, account_id)
+    if opening_balance_floor is not None and (latest_date is None or opening_balance_floor > latest_date):
+        latest_date = opening_balance_floor
+    return latest_date
+
+
+def _collect_csv_pending_rows(
+    csv_path: Path, account_id: int, latest_date: date | None
+) -> tuple[list[PendingRow], int]:
+    with open(csv_path, encoding="utf-8-sig") as f:
+        reader = csv.reader(f, delimiter=";")
+        headers = next(reader)
+        resolved = _resolve_column_mapping(headers)
+        if resolved is None:
+            logging.error(f"Okant CSV-format i {csv_path.name}. Hittade headers: {headers}")
+            return [], 0
+        bank_format, mapping = resolved
+        logging.info(f"  Format: {bank_format.name.upper()}")
+        pending, skipped = _collect_pending_rows(
+            reader,
+            mapping.date_idx,
+            mapping.description_idx,
+            mapping.amount_idx,
+            mapping.transaction_type_idx,
+            latest_date,
+            bank_format.normalise_date,
+        )
+    rows = [
+        PendingRow(account_id, d, desc, amt, bank_format.name, datetime.strptime(d, "%Y-%m-%d").date())
+        for d, desc, amt in pending
+    ]
+    return rows, skipped
+
+
+def _gather_folder_pending(
+    client: FireflyClient,
+    folder: Path,
+    account_map: dict[str, int],
+    dry_run: bool,
+    ignore_latest_date_check: bool,
+) -> list[PendingRow]:
+    resolved = _resolve_folder_account_and_files(folder, account_map)
+    if resolved is None:
+        return []
+    account_id, csv_files = resolved
+    latest_date = _compute_latest_date_floor(client, account_id, csv_files, dry_run, ignore_latest_date_check)
+
+    logging.info(f"Konto ID {account_id}: {folder.name}")
+    if ignore_latest_date_check:
+        logging.info("  Ignorerar senaste datum-kontroll.")
+    elif latest_date is None:
+        logging.info("  Ingen tidigare transaktion hittades i Firefly.")
+
+    all_rows: list[PendingRow] = []
+    total_skipped = 0
+    for csv_path in csv_files:
+        logging.info(f"Bearbetar: {csv_path.name}")
+        rows, skipped = _collect_csv_pending_rows(csv_path, account_id, latest_date)
+        all_rows.extend(rows)
+        total_skipped += skipped
+    if total_skipped:
+        logging.info(f"  Hoppade over: {total_skipped} rader")
+    return all_rows
+
+
+def _description_overlap(a: str, b: str) -> bool:
+    a_lower, b_lower = a.lower(), b.lower()
+    return a_lower in b_lower or b_lower in a_lower
+
+
+def _is_amount_and_date_match(row: PendingRow, other: PendingRow) -> bool:
+    if other.account_id == row.account_id:
+        return False
+    if abs(parse_amount(row.amount) + parse_amount(other.amount)) > 0.005:
+        return False
+    max_days = 0 if other.bank_format == row.bank_format else 2
+    return abs((row.row_date - other.row_date).days) <= max_days
+
+
+def _candidates_for_row(idx: int, rows: list[PendingRow], excluded: set[int]) -> list[int]:
+    row = rows[idx]
+    return [
+        j for j, other in enumerate(rows) if j != idx and j not in excluded and _is_amount_and_date_match(row, other)
+    ]
+
+
+def _choose_candidate(row: PendingRow, rows: list[PendingRow], candidates: list[int]) -> int | None:
+    if len(candidates) == 1:
+        return candidates[0]
+    overlapping = [j for j in candidates if _description_overlap(row.description, rows[j].description)]
+    if len(overlapping) == 1:
+        return overlapping[0]
+    return None
+
+
+def _resolve_row_choice(idx: int, rows: list[PendingRow], matched: set[int]) -> int | None:
+    candidates = _candidates_for_row(idx, rows, matched)
+    if not candidates:
+        return None
+    return _choose_candidate(rows[idx], rows, candidates)
+
+
+def _match_transfer_pairs(rows: list[PendingRow]) -> tuple[list[tuple[int, int]], set[int]]:
+    """Pair rows across different accounts per UC-31 (FR-66).
+
+    A pair is only formed when the match is mutual: row i's best (possibly
+    disambiguated) candidate is j, and j's own best candidate is i. This
+    avoids one row in an ambiguous group "stealing" a pairing just because
+    it happens to be processed first while looking unambiguous from its own
+    side (e.g. three same-amount rows where two share the same counterpart
+    candidates).
+
+    Returns (pairs of row indices, set of all matched row indices).
+    """
+    matched: set[int] = set()
+    pairs: list[tuple[int, int]] = []
+    for i in range(len(rows)):
+        if i in matched:
+            continue
+        chosen = _resolve_row_choice(i, rows, matched)
+        if chosen is None:
+            continue
+        if _resolve_row_choice(chosen, rows, matched) != i:
+            continue
+        pairs.append((i, chosen))
+        matched.add(i)
+        matched.add(chosen)
+    return pairs, matched
+
+
+def _build_transfer_payload(a: PendingRow, b: PendingRow) -> dict[str, str]:
+    neg, pos = (a, b) if parse_amount(a.amount) < 0 else (b, a)
+    return {
+        "type": "transfer",
+        "date": neg.iso_date,
+        "amount": f"{abs(parse_amount(neg.amount)):.2f}",
+        "description": neg.description,
+        "source_id": str(neg.account_id),
+        "destination_id": str(pos.account_id),
+        "currency_code": "SEK",
+    }
+
+
+def _post_transfer(client: FireflyClient, payload: dict[str, str], dry_run: bool) -> None:
+    summary = (
+        f"{payload['amount']} SEK | {payload['date']} | "
+        f"{payload['source_id']} -> {payload['destination_id']} | {payload['description']}"
+    )
+    if dry_run:
+        logging.info(f"  [DRY RUN] [transfer] {summary}")
+        return
+    if BLOCK_TRANSACTION_POSTS:
+        raise RuntimeError("POST av transaktion blockerad eftersom dry-run-skydd är aktivt.")
+    try:
+        client.create_transaction({"transactions": [payload]})
+    except FireflyConnectionError as exc:
+        logging.error(f"  [FEL] transfer {payload['date']}: {exc}")
+        return
+    logging.info(f"  [OK] [transfer] {summary}")
+
+
+def _post_unmatched_rows(client: FireflyClient, rows: list[PendingRow], dry_run: bool) -> None:
+    by_account: dict[int, list[PendingTransaction]] = defaultdict(list)
+    for row in rows:
+        by_account[row.account_id].append((row.iso_date, row.description, row.amount))
+    for account_id, pending in by_account.items():
+        if dry_run:
+            for tx_date, description, amount in pending:
+                create_transaction(client, tx_date, description, amount, account_id, dry_run=True)
+            logging.info(f"  Konto {account_id}: {len(pending)} transaktioner")
+        else:
+            _run_threaded_import(client, pending, account_id)
+
+
+def _run_multi_folder_import(
+    client: FireflyClient,
+    folders: list[Path],
+    account_map: dict[str, int],
+    dry_run: bool,
+    ignore_latest_date_check: bool,
+) -> None:
+    all_rows: list[PendingRow] = []
+    for folder in folders:
+        all_rows.extend(_gather_folder_pending(client, folder, account_map, dry_run, ignore_latest_date_check))
+
+    pairs, matched = _match_transfer_pairs(all_rows)
+    logging.info(f"Detekterade {len(pairs)} overforing(ar) mellan konton.")
+    for i, j in pairs:
+        _post_transfer(client, _build_transfer_payload(all_rows[i], all_rows[j]), dry_run)
+
+    unmatched = [row for idx, row in enumerate(all_rows) if idx not in matched]
+    _post_unmatched_rows(client, unmatched, dry_run)
+
+
 def _parse_cli_args(argv: list[str]) -> tuple[str, bool, bool, bool, bool]:
     if len(argv) < 2:
         raise ValueError(
@@ -602,8 +833,11 @@ def main(
     logging.info(f"Hittade {len(folders)} kontomapp(ar).")
     logging.info(f"Loggar till: {log_file}")
 
-    for folder in folders:
-        process_folder(client, folder, account_map, dry_run, ignore_latest_date_check)
+    if len(folders) > 1:
+        _run_multi_folder_import(client, folders, account_map, dry_run, ignore_latest_date_check)
+    else:
+        for folder in folders:
+            process_folder(client, folder, account_map, dry_run, ignore_latest_date_check)
 
     logging.info("Klar!")
     return 0
