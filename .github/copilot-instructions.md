@@ -1,10 +1,10 @@
-<!-- Generated from .commons/templates/copilot-instructions.md.tmpl via make generate-governance-files. -->
+<!-- Generated from .butler/templates/copilot-instructions.md.tmpl via make generate-governance-files. -->
 
 # GitHub Copilot Instructions - Python Development Guidelines
 
 ## Project Context
 
-This project imports bank transactions from CSV exports (SEB, ICA, Nordea) into a [Firefly III](https://www.firefly-iii.org/) instance via its REST API.
+Python tool for importing bank CSV exports into Firefly III, with automatic date filtering to avoid duplicate transactions.
 
 **Primary source of truth:** `docs/REQUIREMENTS_import_firefly.md` - read it before
 writing any code.
@@ -24,7 +24,7 @@ If a change cannot be expressed as a requirement and use case, do not implement 
 
 ## Task Management
 
-Tasks live in `docs/tasks/TASK-XXX-short-description.md`. See the Workflow Guardian agent (`.github/agents/firefly-workflow-guardian.agent.md`)
+Tasks live in `docs/tasks/TASK-XXX-short-description.md`. See the Workflow Guardian agent (`.github/agents/workflow-guardian.agent.md`)
 for the task file format and full workflow enforcement.
 
 **Branch policy:** Every task runs on its own `task/<NNN>-short-description` branch.
@@ -50,7 +50,7 @@ Or with explicit task ID: `make stage-task f=TASK-001`, `make commit-task`, `mak
 
 ## Bug Discovery
 
-Use the **Firefly Bug Triage** agent to hunt for bugs without fixing anything. It analyses
+Use the **Bug Triage** agent to hunt for bugs without fixing anything. It analyses
 code against the requirements spec, produces a prioritised list, and creates task files for approved bugs.
 
 ## TDD
