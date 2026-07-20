@@ -315,6 +315,41 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 2. If `--dry-run` is provided, the script lists the transactions that would be deleted without requiring confirmation and without deleting anything.
 - Result: Selected accounts' transactions are removed from Firefly, ready for reimport, without affecting accounts, budgets, or categories.
 
+### UC-30: Automatically set opening balance from bank export on first import
+- Actor: User
+- Trigger: The user runs a normal import (UC-1/UC-2) for an account folder as usual.
+- Preconditions: Firefly URL and API token are configured; the account's current opening balance (via `get_opening_balance`) is `0`; the bank format used for the account's CSV files defines a `balance_header` (SEB, ICA, and Nordea all do, via the "Saldo" column).
+- Main flow:
+1. Before importing any transactions for the account, the script determines the earliest-dated row across all of that account's CSV files.
+2. The script sets the account's opening balance via `set_opening_balance(account_id, earliest_row_balance, earliest_row_date)`, using that row's "Saldo" value and date as-is.
+3. The script excludes that earliest row from the transactions to be imported.
+4. The script imports all remaining rows normally (UC-1), i.e. every row dated after the earliest one.
+5. The script logs the opening balance and date that were set, and that the earliest row was used for this purpose and skipped as a transaction.
+- Alternative flow:
+1. If the account's current opening balance is not `0`, the script skips this step entirely and imports all rows as today, without excluding the earliest one.
+2. If the bank format has no `balance_header` (no "Saldo" column available), the script logs a warning that opening balance could not be auto-detected and imports all rows normally, without excluding the earliest one.
+3. If `--dry-run` is provided, the script logs the opening balance/date it *would* set and which row it would exclude, without calling `set_opening_balance` and without posting any transactions.
+- Result: An account that starts at 0 automatically gets a correct opening balance and date derived from its own earliest bank export row, and the rest of that account's history imports normally on top of it — fully automatically, without manual saldo entry.
+
+### UC-31: Detect and import transfers between accounts during multi-account import
+- Actor: User
+- Trigger: The user runs a multi-folder import (UC-2), importing two or more account folders in the same run.
+- Preconditions: Firefly URL and API token are configured; at least two of the folders being imported map to distinct Firefly asset accounts.
+- Main flow:
+1. Before posting anything, the script collects all pending rows (date, description, amount, resolved bank format) from every folder in the batch, tagged with their resolved account.
+2. The script identifies candidate pairs across *different* accounts where the amounts are equal in absolute value with opposite sign (one withdrawal-shaped, one deposit-shaped).
+3. A candidate pair's date window depends on whether both rows resolved to the same bank format: if both accounts use the same bank format (e.g. both SEB), the dates must be identical; if the accounts use different bank formats, the dates may differ by up to 2 days.
+4. When a row has exactly one candidate within its date window, the script pairs it directly.
+5. When a row has more than one candidate within its date window, the script uses description overlap to disambiguate: a candidate whose description is a case-insensitive substring of the other's description (in either direction) is preferred over candidates without such overlap. If exactly one candidate has this overlap, that candidate is chosen.
+6. Each resolved pair is posted as a single `transfer` transaction (`POST /api/v1/transactions`, `type: "transfer"`), with `source_id` = the account whose row was negative and `destination_id` = the account whose row was positive. Both rows are marked as consumed and are not posted again as withdrawal/deposit.
+7. All unmatched or still-ambiguous rows are posted as withdrawal/deposit, exactly as today (UC-1).
+8. The script logs how many transfers were detected and posted, plus the existing withdrawal/deposit/skip counts.
+- Alternative flow:
+1. If, after description-overlap disambiguation (step 5), more than one candidate remains equally viable (or none has overlap), the script does not guess: it logs the ambiguity and posts all candidates as ordinary withdrawal/deposit rows.
+2. If `--dry-run` is provided, the script logs which pairs it *would* post as transfers (and which rows remain ambiguous or unmatched) without posting anything.
+3. If only one folder is being imported (UC-1, not UC-2), the script behaves exactly as today — no cross-account matching is attempted.
+- Result: Transactions between the user's own accounts are recorded as `transfer` in Firefly III from the moment of import, instead of appearing as unrelated withdrawals and deposits — using same-day matching within a bank and a 2-day window across banks, with description overlap to resolve ties.
+
 ## 5. Functional Requirements
 
 ### FR-1 Token loading
@@ -528,6 +563,14 @@ A CSV file that matches neither pattern shall be logged as a warning (`WARNING: 
 
 The system shall provide a clear-transactions operation that accepts either "all accounts" or an explicit list of account names, fetches all transaction IDs for the selected accounts via the Firefly API, and deletes them individually. The operation shall require explicit user confirmation (typing "JA") before deleting, unless run with `--dry-run`, in which case it shall only list the transactions that would be deleted.
 
+### FR-65 Automatic opening balance detection
+
+Before importing transactions for an account whose current opening balance (via `get_opening_balance`) is `0`, the system shall determine the earliest-dated row across that account's CSV files and, if the bank format defines a `balance_header`, set the account's opening balance and opening balance date from that row's balance and date via `set_opening_balance`, then exclude that row from the transactions imported. If the current opening balance is not `0`, or the bank format has no `balance_header`, the system shall skip this step and import all rows unchanged. Under `--dry-run`, the system shall log the opening balance/date and excluded row it would use without calling `set_opening_balance` or posting transactions.
+
+### FR-66 Cross-account transfer detection
+
+When importing two or more account folders in the same run, the system shall collect all pending rows across those folders before posting any transaction, and identify candidate transfer pairs across different accounts by equal absolute amount with opposite sign. A pair's allowed date difference shall be `0` days when both rows' bank formats match, and up to `2` days when they differ. When a row has exactly one candidate within its date window, the system shall pair it; when a row has multiple candidates, the system shall prefer a candidate whose description is a case-insensitive substring of the other's (in either direction) if exactly one such candidate exists, and otherwise treat the row as unmatched. Each resolved pair shall be posted as a single `transfer` transaction (`source_id` = the negative-amount row's account, `destination_id` = the positive-amount row's account), and both rows shall be excluded from individual withdrawal/deposit posting. Unmatched or ambiguous rows shall be posted as withdrawal/deposit as today. Under `--dry-run`, the system shall log the pairs it would post as transfers and the rows left unmatched or ambiguous, without posting anything.
+
 ## 6. Non-Functional Requirements
 
 ### NFR-1 Performance
@@ -638,6 +681,8 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | UC-25 | Use current-task Makefile shortcuts | Implemented |
 | UC-24 | Reduce cognitive complexity in flagged functions | Implemented |
 | UC-29 | Clear transactions for reimport | Not implemented |
+| UC-30 | Automatically set opening balance from bank export on first import | Not implemented |
+| UC-31 | Detect and import transfers between accounts during multi-account import | Not implemented |
 
 ### Functional Requirements
 
@@ -700,6 +745,8 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | FR-59 | Web UI refresh-accounts action | Implemented |
 | FR-60 | Web UI refresh-accounts result page | Implemented |
 | FR-64 | Clear-transactions command | Not implemented |
+| FR-65 | Automatic opening balance detection | Not implemented |
+| FR-66 | Cross-account transfer detection | Not implemented |
 
 ### Non-Functional Requirements
 
