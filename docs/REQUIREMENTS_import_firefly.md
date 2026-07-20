@@ -300,6 +300,21 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 4. Pull requests to `main` execute the shared CI checks through the wrapper.
 - Result: CI behavior remains consistent across projects while preserving per-project configuration.
 
+### UC-29: Clear transactions for reimport
+- Actor: User
+- Trigger: The user runs the clear-transactions function and chooses either "all accounts" or provides a list of account names.
+- Preconditions: Firefly URL and API token are configured.
+- Main flow:
+1. The script resolves the target account list (from cache or discovery) and matches it against the user's selection (all accounts, or the given list).
+2. For each selected account, the script fetches all transaction IDs via `get_transactions_for_account`.
+3. The script shows the total number of transactions that would be deleted, grouped by account, and requires the user to type "JA" to proceed.
+4. If confirmed, the script deletes each transaction via `delete_transaction`.
+5. The script logs the number of deleted transactions per account and in total.
+- Alternative flow:
+1. If the user does not confirm with "JA", the script aborts without deleting anything.
+2. If `--dry-run` is provided, the script lists the transactions that would be deleted without requiring confirmation and without deleting anything.
+- Result: Selected accounts' transactions are removed from Firefly, ready for reimport, without affecting accounts, budgets, or categories.
+
 ## 5. Functional Requirements
 
 ### FR-1 Token loading
@@ -509,6 +524,10 @@ When scanning an import folder for CSV files, the script shall recognize exactly
 
 A CSV file that matches neither pattern shall be logged as a warning (`WARNING: Okänd filtyp, hoppar över: <filename>`) and shall not be split or imported.
 
+### FR-64 Clear-transactions command
+
+The system shall provide a clear-transactions operation that accepts either "all accounts" or an explicit list of account names, fetches all transaction IDs for the selected accounts via the Firefly API, and deletes them individually. The operation shall require explicit user confirmation (typing "JA") before deleting, unless run with `--dry-run`, in which case it shall only list the transactions that would be deleted.
+
 ## 6. Non-Functional Requirements
 
 ### NFR-1 Performance
@@ -585,6 +604,7 @@ Related projects that consume the same `.commons` baseline shall enforce equival
 - Running with --refresh-accounts creates import folders for all discovered accounts.
 - Created folder names contain no spaces or Swedish characters.
 - The system can clear old log files using explicit user confirmation.
+- The system can clear transactions for all accounts or a chosen list of accounts using explicit user confirmation, with a dry-run preview available.
 
 ## 10. Implementation Status
 
@@ -617,6 +637,7 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | UC-24 | Reduce cognitive complexity in flagged functions | Implemented |
 | UC-25 | Use current-task Makefile shortcuts | Implemented |
 | UC-24 | Reduce cognitive complexity in flagged functions | Implemented |
+| UC-29 | Clear transactions for reimport | Not implemented |
 
 ### Functional Requirements
 
@@ -678,6 +699,7 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | FR-58 | Web UI refresh-accounts endpoint | Implemented |
 | FR-59 | Web UI refresh-accounts action | Implemented |
 | FR-60 | Web UI refresh-accounts result page | Implemented |
+| FR-64 | Clear-transactions command | Not implemented |
 
 ### Non-Functional Requirements
 

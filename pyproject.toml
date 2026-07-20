@@ -36,6 +36,7 @@ dev = [
 [project.scripts]
 firefly-import = "firefly_bank_importer.import_firefly:main"
 firefly-import-web = "firefly_bank_importer.web_ui:main"
+firefly-clear-transactions = "firefly_bank_importer.clear_transactions:main"
 
 [tool.ruff]
 line-length = 120

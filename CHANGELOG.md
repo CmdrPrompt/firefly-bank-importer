@@ -15,8 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CLI usage message describes the two supported file types: kontoutdrag-fil and YYYY-MM.csv månadsfil (TASK-050).
 - GitHub Actions CI pipeline: lint, test, and `pip-audit` dependency audit run automatically on every PR to main (TASK-044).
 - Added shared `.commons` governance templates for `CLAUDE.md` and `.github/copilot-instructions.md`, plus a reproducible `make generate-governance-files` workflow that regenerates local project files with source-template headers (TASK-045).
+- New `firefly-clear-transactions` command deletes transactions for all accounts or a chosen list of account names, to support reimporting from scratch. Shows a per-account/total count before acting, requires typing "JA" to confirm, and supports `--dry-run` to preview without deleting or prompting (TASK-051).
 
 ### Fixed
+
+- Restored `pyproject.toml` dependencies, CLI entry points, `[tool.uv.sources]`, mypy overrides, coverage config, and `tool.ruff.line-length` (120) that were accidentally dropped when `.butler` was integrated as a submodule, and fixed the resulting TOML syntax error that broke `uv`/`make install`/`make branch-task` (TASK-052).
 - Web UI folder selection test now exercises the happy path by mocking the account cache; unresolved-folder assertion tightened to verify exact CSS class and status text (TASK-043).
 
 ### Changed
