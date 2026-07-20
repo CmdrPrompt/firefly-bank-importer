@@ -2,7 +2,7 @@
 
 ## Status
 
-not started
+done
 
 ## Description
 
@@ -45,7 +45,7 @@ Matchningsregler (se UC-31 för fullständig beskrivning):
 
 ## Acceptance criteria (Gherkin)
 
-- [ ] Scenario: Överföring mellan konton hos samma bank matchas samma dag
+- [x] Scenario: Överföring mellan konton hos samma bank matchas samma dag
       Given två konton med samma bank-format
       And ett uttag på det ena kontot och en insättning på det andra, med
       samma belopp och samma datum
@@ -53,14 +53,14 @@ Matchningsregler (se UC-31 för fullständig beskrivning):
       Then en enda `transfer`-transaktion postas mellan kontona
       And ingen av raderna postas som withdrawal eller deposit
 
-- [ ] Scenario: Överföring mellan konton hos olika banker matchas inom 2 dagar
+- [x] Scenario: Överföring mellan konton hos olika banker matchas inom 2 dagar
       Given två konton med olika bank-format
       And ett uttag på det ena kontot och en insättning på det andra, med
       samma belopp och datum som skiljer sig med 1 eller 2 dagar
       When importen körs för båda kontons mappar i samma körning
       Then en enda `transfer`-transaktion postas mellan kontona
 
-- [ ] Scenario: Överföring mellan konton hos olika banker matchas inte om
+- [x] Scenario: Överföring mellan konton hos olika banker matchas inte om
       datumskillnaden överstiger 2 dagar
       Given två konton med olika bank-format
       And rader med samma belopp men datum som skiljer sig med mer än 2 dagar
@@ -68,7 +68,7 @@ Matchningsregler (se UC-31 för fullständig beskrivning):
       Then ingen transfer postas
       And båda raderna postas som withdrawal respektive deposit som vanligt
 
-- [ ] Scenario: Tvetydig matchning löses med textöverlappning
+- [x] Scenario: Tvetydig matchning löses med textöverlappning
       Given flera kandidatrader med samma belopp och inom datumfönstret
       And exakt en av kandidaterna har en text som är en delsträng av den
       andra radens text (skiftlägesokänsligt)
@@ -76,27 +76,27 @@ Matchningsregler (se UC-31 för fullständig beskrivning):
       Then den kandidaten paras ihop och postas som transfer
       And övriga kandidater postas som vanligt
 
-- [ ] Scenario: Tvetydig matchning utan entydig textöverlappning postas som vanligt
+- [x] Scenario: Tvetydig matchning utan entydig textöverlappning postas som vanligt
       Given flera kandidatrader med samma belopp och inom datumfönstret
       And ingen, eller mer än en, av kandidaterna har textöverlappning
       When importen körs
       Then ingen av kandidaterna paras ihop
       And samtliga postas som withdrawal/deposit som vanligt
 
-- [ ] Scenario: Enstaka mappimport påverkas inte
+- [x] Scenario: Enstaka mappimport påverkas inte
       Given endast en kontomapp importeras i körningen (UC-1)
       When importen körs
       Then ingen cross-account-matchning görs
       And samtliga rader postas som withdrawal/deposit som idag
 
-- [ ] Scenario: Dry-run visar planerade transfers utan att posta
+- [x] Scenario: Dry-run visar planerade transfers utan att posta
       Given rader som skulle matchas som en överföring
       When importen körs med `--dry-run`
       Then de planerade transfer-paren loggas
       And omatchade/tvetydiga rader loggas separat
       And inga transaktioner postas
 
-- [ ] Scenario: Kvalitetsgrindar
+- [x] Scenario: Kvalitetsgrindar
       When `make lint && make test` körs
       Then båda passerar
       And testtäckningen understiger inte baslinjen vid taskstart
@@ -115,12 +115,21 @@ Matchningsregler (se UC-31 för fullständig beskrivning):
 
 ## Blockers
 
-Beror på TASK-053 (automatisk startsaldo-detektering) endast i den
-meningen att båda ändrar samma importflöde (`process_folder`/`process_csv`)
-— ingen hård blockering, men TASK-053 bör landas och mergas till `main`
-före denna task påbörjas för att undvika stora sammanslagningskonflikter i
-`import_firefly.py`.
+None. TASK-053 landades och mergades till `main` (PR #31) innan denna task
+påbörjades.
 
 ## Completion
 
-_Not yet completed._
+**Date:** 2026-07-21
+**Summary:** Added cross-account transfer detection for multi-folder imports. `main()` now branches: a single resolved folder still goes through the unchanged `process_folder()`/`process_csv()` path (UC-1 unaffected); two or more folders go through the new `_run_multi_folder_import()` path, which gathers every folder's pending rows first (`_gather_folder_pending()`, reusing `_apply_auto_opening_balance()`/`_collect_pending_rows()` per account, tagged into a new `PendingRow` NamedTuple with `account_id`/`bank_format`/`row_date`), matches transfer candidates via `_match_transfer_pairs()`, posts matched pairs as a single `transfer` transaction (`_build_transfer_payload()`/`_post_transfer()`, source = negative-amount account, destination = positive-amount account), and posts everything else as withdrawal/deposit exactly as before (`_post_unmatched_rows()`, still using the existing threaded `_run_threaded_import()` for real posts). Matching rule: equal-and-opposite amount between different accounts, `0`-day window when both rows share a bank format, `2`-day window otherwise; when a row has several amount/date candidates, a candidate is only chosen if its description is a case-insensitive substring of the other's (in either direction) and exactly one candidate has that overlap — verified **mutually** in both directions (`_resolve_row_choice()` called from both sides) so that an ambiguous group of 3+ same-amount rows never lets one row "steal" a pairing just because it looks unambiguous from one side while the other side is genuinely ambiguous; this mutual-match requirement was added after a Hypothesis/example test caught the one-directional version wrongly pairing a 3-row ambiguous group. `--dry-run` logs planned transfers (`[DRY RUN] [transfer] ...`) and leaves unmatched rows going through the existing dry-run preview path, without posting anything. 19 new tests in `tests/unit/test_transfer_detection.py` (unit-level matching/disambiguation logic plus one Hypothesis property test for amount-equality matching, and `main()` integration tests for matched/unmatched/dry-run/single-folder behavior). 416 tests pass (up from 397), coverage 91.51%→92.41% (no regression). `make lint` (ruff, ruff format, mypy, bandit, pymarkdown, complexipy) all clean — required renaming `PendingRow.date` to `PendingRow.iso_date` because the field name shadowed the `datetime.date` type used by the sibling `row_date: date` field, which mypy flagged as `valid-type` error.
+**Files changed:**
+
+- `src/firefly_bank_importer/import_firefly.py` — modified (`PendingRow`, `_resolve_folder_account_and_files`, `_compute_latest_date_floor`, `_collect_csv_pending_rows`, `_gather_folder_pending`, `_description_overlap`, `_is_amount_and_date_match`, `_candidates_for_row`, `_choose_candidate`, `_resolve_row_choice`, `_match_transfer_pairs`, `_build_transfer_payload`, `_post_transfer`, `_post_unmatched_rows`, `_run_multi_folder_import` added; `main()` updated to branch on folder count)
+- `tests/unit/test_transfer_detection.py` — added
+- `docs/REQUIREMENTS_import_firefly.md` — modified (UC-31, FR-66 — already present from requirements confirmation)
+- `CHANGELOG.md` — modified
+- `docs/tasks/TASK-054-transfer-detection.md` — modified
+
+**Branch:** `git checkout task/054-transfer-detection`
+**Stage:** `git add src/firefly_bank_importer/import_firefly.py tests/unit/test_transfer_detection.py CHANGELOG.md docs/tasks/TASK-054-transfer-detection.md`
+**Commit:** `git commit -m "Add cross-account transfer detection for multi-folder imports (TASK-054)"`
