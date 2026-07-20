@@ -239,6 +239,87 @@ def get_latest_transaction_date(client: FireflyClient, account_id: int) -> date 
     return datetime.strptime(date_str, "%Y-%m-%d").date()
 
 
+def _earliest_balance_row_in_rows(
+    reader: Any, bank_format: BankFormat, mapping: ColumnMapping
+) -> tuple[date, str, str] | None:
+    earliest: tuple[date, str, str] | None = None
+    for row in reader:
+        with contextlib.suppress(ValueError, IndexError):
+            iso_date = bank_format.normalise_date(row[mapping.date_idx])
+            row_date = datetime.strptime(iso_date, "%Y-%m-%d").date()
+            balance = f"{parse_amount(row[mapping.balance_idx]):.2f}"
+            if earliest is None or row_date < earliest[0]:
+                earliest = (row_date, iso_date, balance)
+    return earliest
+
+
+def _earliest_balance_row_in_file(csv_path: Path) -> tuple[date, str, str] | None:
+    with open(csv_path, encoding="utf-8-sig") as f:
+        reader = csv.reader(f, delimiter=";")
+        headers = next(reader)
+        resolved = _resolve_column_mapping(headers)
+        if resolved is None:
+            return None
+        bank_format, mapping = resolved
+        if mapping.balance_idx is None:
+            return None
+        return _earliest_balance_row_in_rows(reader, bank_format, mapping)
+
+
+def _find_earliest_balance_row(csv_files: list[Path]) -> tuple[str, str] | None:
+    """Return (iso_date, balance) of the earliest-dated row across csv_files.
+
+    Only considers files whose bank format defines a balance column. Returns
+    None if no such row is found (no balance column available, or no rows).
+    """
+    earliest: tuple[date, str, str] | None = None
+    for csv_path in csv_files:
+        candidate = _earliest_balance_row_in_file(csv_path)
+        if candidate is not None and (earliest is None or candidate[0] < earliest[0]):
+            earliest = candidate
+    if earliest is None:
+        return None
+    return earliest[1], earliest[2]
+
+
+def _apply_auto_opening_balance(
+    client: FireflyClient,
+    account_id: int,
+    csv_files: list[Path],
+    dry_run: bool,
+) -> date | None:
+    """Set the account's opening balance from its earliest bank export row,
+    if the account's current opening balance is 0 (UC-30, FR-65).
+
+    Returns the earliest row's date if an opening balance was set (or would
+    be set, in dry-run mode), so callers can exclude that row from import;
+    returns None otherwise.
+    """
+    try:
+        current = client.get_opening_balance(str(account_id))
+    except FireflyConnectionError:
+        logging.warning(f"  Kunde inte hamta nuvarande opening balance for konto {account_id}.")
+        return None
+
+    balance_str = current.get("balance")
+    if balance_str is not None and parse_amount(balance_str) != 0:
+        return None
+
+    earliest = _find_earliest_balance_row(csv_files)
+    if earliest is None:
+        logging.warning("  Kunde inte auto-detektera startsaldo (ingen saldokolumn i bankformatet).")
+        return None
+
+    iso_date, balance = earliest
+    if dry_run:
+        logging.info(f"  [DRY RUN] Skulle satta opening balance: {balance} SEK per {iso_date} (rad exkluderas).")
+    else:
+        client.set_opening_balance(str(account_id), balance, iso_date)
+        logging.info(f"  Satte opening balance: {balance} SEK per {iso_date} (rad exkluderad fran import).")
+
+    return datetime.strptime(iso_date, "%Y-%m-%d").date()
+
+
 def parse_amount(raw_amount: str) -> float:
     cleaned = raw_amount.strip()
     cleaned = re.sub(r"\s*(kr|sek)\s*", "", cleaned, flags=re.IGNORECASE)
@@ -428,9 +509,13 @@ def process_folder(
         logging.warning(f"Inga CSV-filer i {folder.name}, hoppar över.")
         return
 
+    opening_balance_floor = _apply_auto_opening_balance(client, account_id, csv_files, dry_run)
+
     latest_date = None
     if not ignore_latest_date_check:
         latest_date = get_latest_transaction_date(client, account_id)
+    if opening_balance_floor is not None and (latest_date is None or opening_balance_floor > latest_date):
+        latest_date = opening_balance_floor
 
     logging.info(f"Konto ID {account_id}: {folder.name}")
     if ignore_latest_date_check:

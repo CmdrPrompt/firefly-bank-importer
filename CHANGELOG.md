@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions CI pipeline: lint, test, and `pip-audit` dependency audit run automatically on every PR to main (TASK-044).
 - Added shared `.commons` governance templates for `CLAUDE.md` and `.github/copilot-instructions.md`, plus a reproducible `make generate-governance-files` workflow that regenerates local project files with source-template headers (TASK-045).
 - New `firefly-clear-transactions` command deletes transactions for all accounts or a chosen list of account names, to support reimporting from scratch. Shows a per-account/total count before acting, requires typing "JA" to confirm, and supports `--dry-run` to preview without deleting or prompting (TASK-051).
+- Import now automatically sets an account's opening balance and opening balance date from the earliest row of its bank export CSVs, whenever the account's current opening balance is `0`. That earliest row is excluded from the imported transactions; all later rows import as before. Accounts with a non-zero opening balance, or bank formats without a balance column, are unaffected. `--dry-run` logs the balance/date and excluded row it would set without applying anything (TASK-053).
 
 ### Fixed
 
