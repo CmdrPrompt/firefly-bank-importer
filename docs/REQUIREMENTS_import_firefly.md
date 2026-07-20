@@ -350,6 +350,17 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 3. If only one folder is being imported (UC-1, not UC-2), the script behaves exactly as today — no cross-account matching is attempted.
 - Result: Transactions between the user's own accounts are recorded as `transfer` in Firefly III from the moment of import, instead of appearing as unrelated withdrawals and deposits — using same-day matching within a bank and a 2-day window across banks, with description overlap to resolve ties.
 
+### UC-32: Show progress bar during transaction import
+- Actor: User
+- Trigger: The user runs an import (UC-1 single-folder or UC-2/multi-folder), with or without `--dry-run`.
+- Preconditions: none beyond a normal import run.
+- Main flow:
+1. Before posting transactions for a run, the script determines the total number of rows to be processed: for a single folder, the pending rows for that account; for a multi-folder run, the total of transfer pairs plus unmatched rows across all folders.
+2. The script displays a `tqdm` progress bar that advances once per row processed (whether posted live or logged as a dry-run preview), showing count and elapsed/estimated time.
+3. The progress bar is written to the terminal (stderr) and does not interfere with the existing `INFO`-level log lines written to stdout and the log file.
+4. On completion, the progress bar closes; existing summary log lines (`Summa: X ok, Y fel`, etc.) are unaffected.
+- Result: The user sees live progress during long-running imports, in both dry-run and live mode, for both single- and multi-folder runs.
+
 ## 5. Functional Requirements
 
 ### FR-1 Token loading
@@ -571,6 +582,10 @@ Before importing transactions for an account whose current opening balance (via 
 
 When importing two or more account folders in the same run, the system shall collect all pending rows across those folders before posting any transaction, and identify candidate transfer pairs across different accounts by equal absolute amount with opposite sign. A pair's allowed date difference shall be `0` days when both rows' bank formats match, and up to `2` days when they differ. When a row has exactly one candidate within its date window, the system shall pair it; when a row has multiple candidates, the system shall prefer a candidate whose description is a case-insensitive substring of the other's (in either direction) if exactly one such candidate exists, and otherwise treat the row as unmatched. Each resolved pair shall be posted as a single `transfer` transaction (`source_id` = the negative-amount row's account, `destination_id` = the positive-amount row's account), and both rows shall be excluded from individual withdrawal/deposit posting. Unmatched or ambiguous rows shall be posted as withdrawal/deposit as today. Under `--dry-run`, the system shall log the pairs it would post as transfers and the rows left unmatched or ambiguous, without posting anything.
 
+### FR-67 tqdm progress bar dependency
+
+The system shall depend on `tqdm>=4.66` and wrap the transaction-posting loops in `process_csv` (single-folder path) and the multi-folder posting path (`_post_unmatched_rows`, transfer posting loop) with a `tqdm` progress bar advancing once per row processed, in both dry-run and live mode.
+
 ## 6. Non-Functional Requirements
 
 ### NFR-1 Performance
@@ -683,6 +698,7 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | UC-29 | Clear transactions for reimport | Not implemented |
 | UC-30 | Automatically set opening balance from bank export on first import | Not implemented |
 | UC-31 | Detect and import transfers between accounts during multi-account import | Not implemented |
+| UC-32 | Show progress bar during transaction import | Not implemented |
 
 ### Functional Requirements
 
@@ -747,6 +763,7 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | FR-64 | Clear-transactions command | Not implemented |
 | FR-65 | Automatic opening balance detection | Not implemented |
 | FR-66 | Cross-account transfer detection | Not implemented |
+| FR-67 | tqdm progress bar dependency | Not implemented |
 
 ### Non-Functional Requirements
 

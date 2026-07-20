@@ -9,6 +9,7 @@ dependencies = [
     "httpx>=0.28.1",
     "python-multipart>=0.0.9",
     "requests>=2.31",
+    "tqdm>=4.66",
     "uvicorn>=0.35.0",
 ]
 
@@ -31,6 +32,7 @@ dev = [
     "fastapi",
     "uvicorn",
     "httpx",
+    "types-tqdm",
 ]
 
 [project.scripts]
