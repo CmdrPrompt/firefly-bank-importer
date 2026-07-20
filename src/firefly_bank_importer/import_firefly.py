@@ -650,13 +650,15 @@ def _description_overlap(a: str, b: str) -> bool:
     return a_lower in b_lower or b_lower in a_lower
 
 
+MAX_TRANSFER_DATE_DIFF_DAYS = 3
+
+
 def _is_amount_and_date_match(row: PendingRow, other: PendingRow) -> bool:
     if other.account_id == row.account_id:
         return False
     if abs(parse_amount(row.amount) + parse_amount(other.amount)) > 0.005:
         return False
-    max_days = 0 if other.bank_format == row.bank_format else 2
-    return abs((row.row_date - other.row_date).days) <= max_days
+    return abs((row.row_date - other.row_date).days) <= MAX_TRANSFER_DATE_DIFF_DAYS
 
 
 def _candidates_for_row(idx: int, rows: list[PendingRow], excluded: set[int]) -> list[int]:
@@ -666,13 +668,31 @@ def _candidates_for_row(idx: int, rows: list[PendingRow], excluded: set[int]) ->
     ]
 
 
-def _choose_candidate(row: PendingRow, rows: list[PendingRow], candidates: list[int]) -> int | None:
-    if len(candidates) == 1:
-        return candidates[0]
+def _choose_among(row: PendingRow, rows: list[PendingRow], candidates: list[int]) -> int | None:
+    """Pick the single candidate whose description overlaps row's, or None."""
     overlapping = [j for j in candidates if _description_overlap(row.description, rows[j].description)]
     if len(overlapping) == 1:
         return overlapping[0]
     return None
+
+
+def _choose_candidate(row: PendingRow, rows: list[PendingRow], candidates: list[int]) -> int | None:
+    """Choose a matching candidate per UC-31/FR-66 (TASK-056).
+
+    Same-day (0-day) candidates use amount-only matching when unambiguous;
+    a lone same-day candidate is chosen outright. With several same-day
+    candidates, description overlap disambiguates. Candidates 1-3 days away
+    are only ever chosen via description overlap — an amount-only match is
+    never made across differing dates, to avoid pairing unrelated
+    transactions that coincidentally share an amount.
+    """
+    same_day = [j for j in candidates if rows[j].row_date == row.row_date]
+    if len(same_day) == 1:
+        return same_day[0]
+    if len(same_day) > 1:
+        return _choose_among(row, rows, same_day)
+    near_day = [j for j in candidates if rows[j].row_date != row.row_date]
+    return _choose_among(row, rows, near_day)
 
 
 def _resolve_row_choice(idx: int, rows: list[PendingRow], matched: set[int]) -> int | None:
