@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any, Callable, cast
 
 import requests
 
@@ -10,11 +10,39 @@ from firefly_python_api._exceptions import FireflyConnectionError
 from firefly_python_api._types import (
     AssetAccount,
     BillData,
+    BillPayload,
     BudgetData,
     BudgetLimitData,
     CategoryData,
     TransactionPayload,
+    TransactionRead,
 )
+
+
+def _split_to_transaction_read(split: dict[str, Any]) -> TransactionRead:
+    """Flatten a single Firefly III transaction split into a :class:`TransactionRead`.
+
+    Parameters
+    ----------
+    split:
+        One entry from a Firefly III transaction object's
+        ``attributes.transactions`` list.
+
+    Returns
+    -------
+    TransactionRead
+        ``date`` truncated to ``YYYY-MM-DD``; ``destination_name``,
+        ``category_name``, ``source_name`` and ``source_id`` default to
+        ``None`` when absent from ``split``.
+    """
+    return TransactionRead(
+        date=split["date"][:10],
+        amount=split["amount"],
+        destination_name=split.get("destination_name"),
+        category_name=split.get("category_name"),
+        source_name=split.get("source_name"),
+        source_id=split.get("source_id"),
+    )
 
 
 class FireflyClient:
@@ -59,6 +87,53 @@ class FireflyClient:
             response.raise_for_status()
         except requests.RequestException as exc:
             raise FireflyConnectionError(f"POST {endpoint} failed: {exc}") from exc
+
+    def _post_expect(
+        self, endpoint: str, payload: dict[str, Any], expected_statuses: tuple[int, ...]
+    ) -> None:
+        """POST ``payload`` to ``endpoint``; raise unless the response status is in
+        ``expected_statuses``.
+
+        Unlike :meth:`_post`, this does not rely on ``raise_for_status()`` (which
+        only raises on 4xx/5xx). Any status code outside ``expected_statuses`` —
+        including unexpected 2xx/3xx codes — raises :class:`FireflyConnectionError`.
+        """
+        try:
+            response = self.session.post(endpoint, json=payload)
+        except requests.RequestException as exc:
+            raise FireflyConnectionError(f"POST {endpoint} failed: {exc}") from exc
+        if response.status_code not in expected_statuses:
+            try:
+                body = cast(dict[str, Any], response.json())
+            except ValueError:
+                body = None
+            raise FireflyConnectionError(
+                f"POST {endpoint} failed: unexpected status {response.status_code}",
+                status_code=response.status_code,
+                response_body=body,
+            )
+
+    def _delete_expect(self, endpoint: str, expected_statuses: tuple[int, ...]) -> None:
+        """DELETE ``endpoint``; raise unless the response status is in
+        ``expected_statuses``.
+
+        Mirrors :meth:`_post_expect`: any status code outside
+        ``expected_statuses`` raises :class:`FireflyConnectionError`.
+        """
+        try:
+            response = self.session.delete(endpoint)
+        except requests.RequestException as exc:
+            raise FireflyConnectionError(f"DELETE {endpoint} failed: {exc}") from exc
+        if response.status_code not in expected_statuses:
+            try:
+                body = cast(dict[str, Any], response.json())
+            except ValueError:
+                body = None
+            raise FireflyConnectionError(
+                f"DELETE {endpoint} failed: unexpected status {response.status_code}",
+                status_code=response.status_code,
+                response_body=body,
+            )
 
     # ------------------------------------------------------------------
     # REQ-001 — connectivity
@@ -146,6 +221,49 @@ class FireflyClient:
         """
         self._post(f"{self.url}/api/v1/transactions", dict(payload))
 
+    def get_transactions_for_account(self, account_id: str) -> list[str]:
+        """Return all transaction IDs for an account, fetching every page automatically.
+
+        Parameters
+        ----------
+        account_id:
+            Firefly III account ID.
+
+        Returns
+        -------
+        list[str]
+            Transaction IDs in API response order. Empty when the account
+            has no transactions.
+        """
+        transaction_ids: list[str] = []
+        page = 1
+        while True:
+            data = self._get(
+                f"{self.url}/api/v1/accounts/{account_id}/transactions",
+                params={"page": page},
+            )
+            for item in data["data"]:
+                transaction_ids.append(item["id"])
+            if page >= data["meta"]["pagination"]["total_pages"]:
+                break
+            page += 1
+        return transaction_ids
+
+    def delete_transaction(self, transaction_id: str) -> None:
+        """Delete a transaction from Firefly III.
+
+        Parameters
+        ----------
+        transaction_id:
+            Firefly III transaction ID.
+
+        Raises
+        ------
+        FireflyConnectionError
+            On any network error or a response status other than 204.
+        """
+        self._delete_expect(f"{self.url}/api/v1/transactions/{transaction_id}", (204,))
+
     # ------------------------------------------------------------------
     # REQ-003 — reporting and resource read methods
     # ------------------------------------------------------------------
@@ -218,3 +336,77 @@ class FireflyClient:
             f"{self.url}/api/v1/summary/basic",
             params={"start": start, "end": end},
         )
+
+    # ------------------------------------------------------------------
+    # REQ-007 — create bill
+    # ------------------------------------------------------------------
+
+    def create_bill(self, payload: BillPayload) -> None:
+        """Post a new bill to Firefly III.
+
+        Parameters
+        ----------
+        payload:
+            Bill data. Required fields: ``name``, ``amount_min``,
+            ``amount_max``, ``date``, ``repeat_freq``, ``active``.
+            ``repeat_freq`` is not validated client-side; invalid values are
+            rejected by the Firefly III API.
+
+        Raises
+        ------
+        FireflyConnectionError
+            On any network error or a response status other than 200/201
+            (including 422 for a duplicate bill name).
+        """
+        self._post_expect(f"{self.url}/api/v1/bills", dict(payload), (200, 201))
+
+    # ------------------------------------------------------------------
+    # REQ-006 — withdrawal transactions
+    # ------------------------------------------------------------------
+
+    def get_withdrawal_transactions(
+        self,
+        start: str,
+        end: str,
+        on_page: Callable[[int, int], None] | None = None,
+    ) -> list[TransactionRead]:
+        """Return all withdrawal transactions in a date range, fetching every page.
+
+        Each Firefly III transaction object may contain multiple splits under
+        ``attributes.transactions``; each split is flattened into its own
+        :class:`TransactionRead` entry.
+
+        Parameters
+        ----------
+        start:
+            Start date in ``YYYY-MM-DD`` format.
+        end:
+            End date in ``YYYY-MM-DD`` format.
+        on_page:
+            Optional callback invoked as ``on_page(page, total_pages)`` after
+            each page has been fetched and parsed. `page` is the 1-indexed
+            page just completed. Exceptions raised by `on_page` propagate to
+            the caller and stop further page fetches.
+
+        Returns
+        -------
+        list[TransactionRead]
+            Flattened withdrawal transaction splits.
+        """
+        transactions: list[TransactionRead] = []
+        page = 1
+        while True:
+            data = self._get(
+                f"{self.url}/api/v1/transactions",
+                params={"type": "withdrawal", "start": start, "end": end, "page": page},
+            )
+            for item in data["data"]:
+                for split in item["attributes"]["transactions"]:
+                    transactions.append(_split_to_transaction_read(split))
+            total_pages = data["meta"]["pagination"]["total_pages"]
+            if on_page is not None:
+                on_page(page, total_pages)
+            if page >= total_pages:
+                break
+            page += 1
+        return transactions

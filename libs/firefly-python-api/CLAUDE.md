@@ -1,6 +1,6 @@
 # firefly-python-api
 
-Python client library for the Firefly III REST API — shared HTTP layer with credential management and API coverage for accounts, transactions, and reporting resources.
+Python client library for the Firefly III REST API.Provides a shared HTTP layer with credential management and API coverage for accounts, transactions, and reporting resources. Designed to be used as a dependency by consumer projects such as firefly-bank-importer and firefly-bills-analyzer
 
 ## Spec-Driven Development
 
@@ -40,6 +40,24 @@ make merge-current-task            # squash-merge when ready, pull main
 ```
 
 Or with explicit task ID: `make stage-task f=TASK-001`, `make commit-task`, `make pr-task`.
+
+## Cross-Workspace Boundary
+
+This workspace covers only the current repository. Any sibling or dependency
+repo (including a possibly-stale vendored copy inside this repo, e.g. a
+`lib/` directory) is out of bounds for direct edits.
+
+If a task here is blocked on work that belongs in another repo/workspace
+(missing method/type, dependency not yet released, etc.):
+
+- **Never write code** in that other workspace from here, under any
+  circumstances.
+- Task files and requirements-doc updates in another repo/workspace may be
+  made there, but only after stopping and getting the user's explicit
+  approval first — do not make the edit and then ask; ask, then edit.
+- Report the blocker to the user: name the exact missing piece
+  (method/type/task) and the repo it belongs to. Resume implementation
+  here only once the user confirms the dependency is in place.
 
 ## Bug Discovery
 

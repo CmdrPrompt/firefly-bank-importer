@@ -467,17 +467,20 @@ dependencies = [
 requires-dist = [
     { name = "bandit", marker = "extra == 'dev'" },
     { name = "complexipy", marker = "extra == 'dev'" },
+    { name = "hypothesis", marker = "extra == 'dev'" },
     { name = "mypy", marker = "extra == 'dev'" },
     { name = "pre-commit", marker = "extra == 'dev'" },
     { name = "pymarkdownlnt", marker = "extra == 'dev'", specifier = ">=0.9.36" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest-cov", marker = "extra == 'dev'" },
-    { name = "python-dotenv", specifier = ">=1.0" },
-    { name = "requests", specifier = ">=2.32" },
+    { name = "python-dotenv" },
+    { name = "requests" },
     { name = "ruff", marker = "extra == 'dev'" },
-    { name = "types-requests", marker = "extra == 'dev'" },
 ]
 provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "butler-core", git = "https://github.com/CmdrPrompt/python-butler.git" }]
 
 [[package]]
 name = "h11"
