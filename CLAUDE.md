@@ -1,23 +1,97 @@
-<!-- Generated from .commons/templates/CLAUDE.md.tmpl via make generate-governance-files. -->
+# firefly-bank-importer
 
-# CLAUDE.md - firefly-bank-importer
+Python tool for importing bank CSV exports into Firefly III, with automatic date filtering to avoid duplicate transactions.
 
-## Project Context
+## Spec-Driven Development
 
-This project imports bank transactions from CSV exports (SEB, ICA, Nordea) into a [Firefly III](https://www.firefly-iii.org/) instance via its REST API.
+All changes must be grounded in a requirements specification at `docs/REQUIREMENTS_import_firefly.md`.
 
-**Primary source of truth:** `docs/REQUIREMENTS_import_firefly.md` - read it before
-writing any code.
+Before writing any code for a new feature or change:
 
-## Project-Specific Rules
+1. Update `docs/REQUIREMENTS_import_firefly.md` with the relevant requirement(s) and use case(s).
+2. Present the updated text and ask the user: "Is this what you intended?"
+3. Wait for explicit confirmation.
+4. Only then follow the TDD cycle.
 
-- Do not write code before reading `docs/REQUIREMENTS_import_firefly.md`.
-- Use the **Firefly Workflow Guardian** agent for task enforcement.
-- Use the **Firefly Bug Triage** agent to hunt for bugs without fixing them.
+If a change cannot be expressed as a requirement and use case, do not implement it.
 
-## Project-Specific Make Targets
+## Task Management
 
-- `make web -- start firefly-import-web on http://127.0.0.1:8000`
+Tasks live in `docs/tasks/TASK-XXX-short-description.md`. See the Workflow Guardian
+agent (`.github/agents/workflow-guardian.agent.md`) for the task file format and full
+workflow enforcement.
 
-<!-- All other workflow rules (TDD, task management, changelog, branch policy)
-     are in ~/.claude/CLAUDE.md -->
+**Branch policy:** Every task runs on its own `task/<NNN>-short-description` branch.
+Never commit implementation work on `main`.
+
+**Branch sync:** After switching to the task branch, check if it is behind `main`.
+If it is, run `git merge main` before writing any code.
+
+**Task workflow:**
+
+```bash
+make branch-task f=TASK-001        # create/switch to task branch
+# implement, then update CHANGELOG.md and task file Completion section
+make stage-current-task            # auto-fix and stage files listed in task file
+git diff --staged                  # optional review
+make commit-current-task           # commit using message from task file — never git commit directly
+make pr-current-task               # open GitHub PR
+make merge-current-task            # squash-merge when ready, pull main
+```
+
+Or with explicit task ID: `make stage-task f=TASK-001`, `make commit-task`, `make pr-task`.
+
+## Cross-Workspace Boundary
+
+This workspace covers only the current repository. Any sibling or dependency
+repo (including a possibly-stale vendored copy inside this repo, e.g. a
+`lib/` directory) is out of bounds for direct edits.
+
+If a task here is blocked on work that belongs in another repo/workspace
+(missing method/type, dependency not yet released, etc.):
+
+- **Never write code** in that other workspace from here, under any
+  circumstances.
+- Task files and requirements-doc updates in another repo/workspace may be
+  made there, but only after stopping and getting the user's explicit
+  approval first — do not make the edit and then ask; ask, then edit.
+- Report the blocker to the user: name the exact missing piece
+  (method/type/task) and the repo it belongs to. Resume implementation
+  here only once the user confirms the dependency is in place.
+
+## Bug Discovery
+
+Use the **Bug Triage** agent (`.github/agents/bug-triage.agent.md`) to hunt for
+bugs without fixing anything. It analyses code against the requirements spec,
+produces a prioritised list, and creates task files for approved bugs.
+
+## TDD
+
+**Red → Green → Refactor.** No exceptions.
+
+- Use **Hypothesis** for all parsing and data transformation functions.
+- Coverage must not drop below the task-start baseline when a task is completed.
+
+## Running the Application
+
+```bash
+make help
+```
+
+## Changelog
+
+Describe shipped behavior, not internal task bookkeeping.
+
+- Behavior-first language: what was added, changed, or fixed.
+- TASK-ID as a suffix reference only.
+- Do not write an entry that only says a task was completed.
+- Group related work into one bullet rather than one bullet per sub-task.
+
+## What NOT to Do
+
+- Do not write code before the requirements spec is confirmed.
+- Do not skip writing tests first (TDD).
+- Do not commit code that fails `make lint` or `make test`.
+- Do not add dependencies without a clear requirement.
+- Do not suppress type errors with `# type: ignore` without explanation.
+- Do not run `git commit` directly on a task branch — always use `make commit-current-task`.
