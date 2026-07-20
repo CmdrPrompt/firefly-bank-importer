@@ -1,14 +1,14 @@
-# firefly-bank-importer
+# firefly-python-api
 
-Python tool for importing bank CSV exports into Firefly III, with automatic date filtering to avoid duplicate transactions.
+Python client library for the Firefly III REST API.Provides a shared HTTP layer with credential management and API coverage for accounts, transactions, and reporting resources. Designed to be used as a dependency by consumer projects such as firefly-bank-importer and firefly-bills-analyzer
 
 ## Spec-Driven Development
 
-All changes must be grounded in a requirements specification at `docs/REQUIREMENTS_import_firefly.md`.
+All changes must be grounded in a requirements specification at `docs/REQUIREMENTS.md`.
 
 Before writing any code for a new feature or change:
 
-1. Update `docs/REQUIREMENTS_import_firefly.md` with the relevant requirement(s) and use case(s).
+1. Update `docs/REQUIREMENTS.md` with the relevant requirement(s) and use case(s).
 2. Present the updated text and ask the user: "Is this what you intended?"
 3. Wait for explicit confirmation.
 4. Only then follow the TDD cycle.

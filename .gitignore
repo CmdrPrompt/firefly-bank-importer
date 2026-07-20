@@ -1,15 +1,3 @@
-# Project specific ignores
-token
-secrets.json
-config.json
-accounts_cache.json
-.qodo/
-bankImports/
-logs/
-*.log
-
-*.bak
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -39,8 +27,6 @@ share/python-wheels/
 MANIFEST
 
 # PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
 
@@ -103,3 +89,5 @@ complexipy-results*.json
 
 # macOS
 .DS_Store
+secrets.json
+config.json

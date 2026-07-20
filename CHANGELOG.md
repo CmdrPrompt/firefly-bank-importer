@@ -2,118 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
 ### Added
+- `FireflyClient(url, token)` wraps `requests.Session` with `Authorization: Bearer`, `Accept: application/json`, and `Content-Type: application/json` headers (TASK-001)
+- `FireflyClient.validate_connection()` verifies server reachability via `GET /api/v1/about`; raises `FireflyConnectionError` on network or HTTP failure (TASK-001)
+- `load_config(env_path)` reads `FIREFLY_URL` and `FIREFLY_TOKEN` from the environment or a `.env` file; raises `ValueError` when either value is absent (TASK-001)
+- `FireflyClient.get_asset_accounts()` fetches all asset accounts with automatic pagination (TASK-002)
+- `FireflyClient.get_latest_transaction_date(account_id)` returns the most recent transaction date as `YYYY-MM-DD` or `None` (TASK-002)
+- `FireflyClient.create_transaction(payload)` posts a transaction and raises `FireflyConnectionError` on failure (TASK-002)
+- `FireflyClient.get_bills()`, `get_budgets()`, `get_budget_limits(budget_id)`, `get_categories()`, and `get_summary(start, end)` provide read-only access to Firefly III reporting resources (TASK-002)
+- Read-only integration test suite (`make test-integration`) verified against a real Firefly III instance; credentials loaded from `config.json`/`secrets.json` or environment (TASK-003)
+- `TypedDict` types `AssetAccount`, `TransactionPayload`, `BillData`, `BudgetData`, `BudgetLimitData`, `CategoryData` exported from `firefly_python_api` for IDE code completion and `mypy` type checking (TASK-004)
+- `FireflyClient.get_withdrawal_transactions(start, end)` fetches all withdrawal transactions in a date range, following pagination automatically and flattening multi-split transactions into individual `TransactionRead` records (`date`, `amount`, `destination_name`, `category_name`) (TASK-005)
+- `FireflyClient.create_bill(payload)` registers a new recurring bill via `POST /api/v1/bills`, treating HTTP 200/201 as success and raising `FireflyConnectionError` on any other status (including a duplicate bill name) or network error; `BillPayload` `TypedDict` (`name`, `amount_min`, `amount_max`, `date`, `repeat_freq`, `active`) exported from `firefly_python_api` (TASK-006)
+- `FireflyConnectionError` raised by `create_bill()` on a non-2xx response now carries `status_code` and `response_body` (parsed JSON, or `None` for a non-JSON body or a network-level failure), letting callers distinguish a 422 duplicate-name rejection from other failures without re-parsing HTTP internals (TASK-007)
+- `TransactionRead` records returned by `get_withdrawal_transactions()` now also carry `source_name` and `source_id` (the account funds are withdrawn from), defaulting to `None` when absent from the API response, so consumers can plan balance transfers ahead of recurring withdrawals (TASK-010)
+- `get_withdrawal_transactions(start, end, on_page=None)` accepts an optional `on_page(page, total_pages)` callback invoked after each page is fetched, letting consumers drive a progress indicator during long-running imports without this library depending on any progress-bar package; omitting it leaves behavior unchanged (TASK-011)
+- `FireflyClient.get_transactions_for_account(account_id)` fetches all transaction IDs for an account with automatic pagination, and `FireflyClient.delete_transaction(transaction_id)` deletes a transaction (treating HTTP 204 as success), so consumers can implement a "clear transactions for selected accounts" reimport flow without duplicating pagination and HTTP error handling (TASK-012)
+- `FireflyClient.set_opening_balance(account_id, balance, date)` sets an account's opening balance and opening balance date via `PUT /api/v1/accounts/{id}`, treating HTTP 200 as success and raising `FireflyConnectionError` (with `status_code`/`response_body`) on any other status or network error, so consumers can establish a correct starting balance after clearing and re-importing transaction history (TASK-013)
+- `FireflyClient.get_opening_balance(account_id)` reads an account's current opening balance and opening balance date via `GET /api/v1/accounts/{id}`, returning an `OpeningBalance` `TypedDict` (`balance`, `date`, both `None` when unset) so consumers can decide whether `set_opening_balance()` needs to be called at all (TASK-014)
 
-- CSV files in import folders are now filtered by filename: files containing `konto` or `kontoutdrag` (case-insensitive) are split into monthly files; `YYYY-MM.csv` files are imported directly; any other `.csv` file triggers a warning and is skipped (TASK-049).
-- Import now only processes `YYYY-MM.csv` monthly files; leftover non-monthly CSV files that were not split are no longer imported (TASK-050).
-- Web UI upload rejects files whose name does not contain `konto` or `kontoutdrag`, and the upload form now shows the naming convention (TASK-050).
-- CLI usage message describes the two supported file types: kontoutdrag-fil and YYYY-MM.csv månadsfil (TASK-050).
-- GitHub Actions CI pipeline: lint, test, and `pip-audit` dependency audit run automatically on every PR to main (TASK-044).
-- Added shared `.commons` governance templates for `CLAUDE.md` and `.github/copilot-instructions.md`, plus a reproducible `make generate-governance-files` workflow that regenerates local project files with source-template headers (TASK-045).
-- New `firefly-clear-transactions` command deletes transactions for all accounts or a chosen list of account names, to support reimporting from scratch. Shows a per-account/total count before acting, requires typing "JA" to confirm, and supports `--dry-run` to preview without deleting or prompting (TASK-051).
+### Changed
+- Test suite for `create_bill()`'s `status_code`/`response_body` exception attributes now asserts against the real `requests.exceptions.JSONDecodeError` (instead of a bare `ValueError`) for the non-JSON error body case, and consolidates the 422/500 non-success scenarios into one parametrized test with no loss of scenario traceability (TASK-008, TASK-009)
 
 ### Fixed
-
-- Restored `pyproject.toml` dependencies, CLI entry points, `[tool.uv.sources]`, mypy overrides, coverage config, and `tool.ruff.line-length` (120) that were accidentally dropped when `.butler` was integrated as a submodule, and fixed the resulting TOML syntax error that broke `uv`/`make install`/`make branch-task` (TASK-052).
-- Web UI folder selection test now exercises the happy path by mocking the account cache; unresolved-folder assertion tightened to verify exact CSS class and status text (TASK-043).
-
-### Changed
-
-- All Firefly III HTTP calls (`session management`, `get_asset_accounts`, `get_latest_transaction_date`, `create_transaction`, `validate_connection`) are now delegated to the `firefly-python-api` library, bundled as a git subtree at `libs/firefly-python-api/`. Inline `requests.Session` construction removed from `import_firefly.py`, `web_ui.py`, and `config.py` (TASK-046).
-- Removed unreachable `KeyError` from `except`-clauses in `config.py` — `json.loads()` never raises `KeyError` (TASK-030).
-- Removed dead code `detect_csv_format()` and `_get_csv_indices()` from `import_firefly.py` — neither function was called (TASK-030).
-- Removed silent `[:10]`-slice before `strptime` in `web_ui.py` — date strings are now parsed strictly as `YYYY-MM-DD` (TASK-030).
-- Replaced misleading catch-all warning "Kunde inte läsa Firefly-inställningar" with separate, precise messages for missing URL and missing token in `web_ui.py` (TASK-030).
-- Added `description_idx` bounds-check inside `_build_live_import_description` in `web_ui.py` to guard against out-of-bounds access if called outside its normal context (TASK-030).
-- Documented the design decision that empty CSV files are warnings (non-blocking) while unknown formats are errors (blocking) in `web_ui.py` (TASK-030).
-
-### Added
-- Fixed `normalise_date` crash when importing already-split Nordea files: the method now falls back to ISO 8601 parsing if the bank-specific format does not match, making it idempotent for dates that were normalised during split (TASK-040).
-- Added Nordea bank CSV format support: the importer now recognises Nordea exports (`Bokföringsdag`, `Belopp`, `Rubrik` headers), normalises `YYYY/MM/DD` dates to ISO 8601, and converts Swedish comma-decimal amounts to US format before sending to the Firefly API (TASK-039).
-- Added a FastAPI-based web UI for import folder selection, including HTML and JSON endpoints for listing folders, CSV counts, detected formats, and date ranges (TASK-016).
-- Added interactive account matching in the web UI with candidate lookup from the Firefly account cache and validation that blocks unresolved folders (TASK-017).
-- Added dry-run preview endpoints and page showing per-folder and total candidate transactions, duplicate skips, date ranges, warnings, and blocking errors before live import (TASK-018).
-- Added live-import job execution in the web UI with asynchronous start/status APIs, polling-based progress view, per-job event log, current folder/file context, and completion totals (TASK-019).
-- Added web UI import history and per-run log details with endpoints (`/api/import-history`, `/api/import-history/{run_id}`) and pages (`/history`, `/history/{run_id}`), plus unit tests for list/details behavior (TASK-022).
-- Added a CSV upload page and multipart API endpoint in the web UI for placing files in import folders with per-file validation and user-visible saved/rejected feedback (TASK-020).
-- Added web UI account refresh via `POST /api/refresh-accounts` endpoint: triggers live account discovery from Firefly, updates the local cache, creates missing import folders, and returns a summary with total accounts, list of account names, and new folders created; `POST /refresh-accounts` renders an HTML result page listing all discovered account names and counts; index page button now navigates to this result page instead of displaying raw JSON (TASK-023).
-- Added web UI settings endpoints (`GET /settings`, `POST /api/settings`) for reading and updating Firefly URL and API token with URL validation against the Firefly API and atomic persist to `config.json`/`secrets.json`; token value is never returned in responses (TASK-021).
-- Added characterization tests for web UI upload, settings, and live-import error branches (TASK-025).
-- Added Makefile shortcut targets for the active task branch: `stage-current-task`, `commit-current-task`, and `pr-current-task`, enabling task-file-driven stage/commit/PR flow without passing `f=<TASK-ID>` explicitly (TASK-027).
-
-### Changed
-- Increased web UI coverage from 73% to 90%, restoring `make test` to passing with 87% total project coverage (TASK-025).
-- Reduced cognitive complexity in configuration and web UI flow by extracting smaller helper functions, moving route logic out of `create_app`, and refactoring dry-run/live-import processing so all functions pass Complexipy thresholds in `make lint` (TASK-026).
-
-### Fixed
-- Made optional bank-format column mapping robust when optional headers are configured but absent in CSV input, so `build_column_mapping` now returns `None` for missing optional indices instead of raising lookup errors.
-
-## [0.1.2] - 2026-03-28
-
-### Added
-- Characterisation test suite covering date parsing, duplicate detection, CSV parsing,
-  amount parsing, account matching, transaction payload building, log result handling,
-  CLI argument parsing, account cache loading, CSV splitting, `process_csv`,
-  `process_folder`, `build_account_map`, `save_account_cache`, `create_import_folders`,
-  `auto_split_folder`, and `create_transaction` (220+ tests in total).
-- `make stage`, `make stage-task`, and `make commit-task` Makefile targets to automate
-  the task-driven commit workflow.
-
-### Changed
-- Minimum test coverage threshold raised to 80% (currently 85%).
-- pre-commit ruff hook updated to v0.15.8 (matching local tooling) and switched to
-  `--check` mode to prevent stash conflicts during commits.
-- mypy configuration extended with module overrides for `pytest`, `hypothesis`, and
-  `requests` stubs.
-
-## [0.1.1] - 2026-03-27
-
-### Added
-- Dynamic asset account discovery from Firefly III via `GET /api/v1/accounts?type=asset` with pagination support.
-- Local account cache file (`accounts_cache.json`) storing discovered account IDs, names, types, and fetch timestamp.
-- `--refresh-accounts` CLI flag to force a fresh account fetch from Firefly and overwrite the local cache.
-- Fallback to local cache when Firefly account discovery fails at runtime.
-- Deterministic tie-break strategy when multiple accounts match a folder name (longest name wins), with log output when a tie-break occurs.
-- Automatic creation of import folders (named `kontoutdrag_<account>`) when account discovery runs.
-
-### Changed
-- `ACCOUNT_MAP` hardcoded dictionary replaced by dynamic account resolution using discovered/cached Firefly data.
-- `find_account_id` now accepts the resolved account map as a parameter instead of reading from a module-level constant.
-- `process_folder` and `main` updated to pass the account map through the call chain.
-- Usage message updated to include the new `--refresh-accounts` flag.
-- Folder name sanitization now replaces Swedish characters (å→a, ä→a, ö→o), spaces, and filesystem-invalid characters with underscores.
-
-## [0.1.0] - 2026-03-27
-
-### Added
-- Unified import script for Firefly III in import_firefly.py.
-- Support for SEB CSV format via header detection.
-- Support for ICA CSV format via header detection.
-- Automatic CSV format detection with explicit handling for unknown headers.
-- Account mapping from folder names to Firefly account IDs.
-- Support for importing a single folder containing CSV files directly.
-- Support for importing multiple account subfolders from a base directory.
-- API token loading from local token file.
-- Dry-run mode via --dry-run flag.
-- Latest-date deduplication via Firefly account transactions endpoint.
-- Override flag --ignore-latest-date-check to bypass deduplication filter.
-- Amount normalization for Swedish numeric and currency variants.
-- Transaction creation with deposit/withdrawal mapping based on amount sign.
-- Currency assignment to SEK in outbound transactions.
-- Timestamped logging to both console and log file.
-- Per-file import summaries including success, error, and skipped counts.
-
-### Changed
-- Amount serialization standardized to decimal-dot output suitable for API payloads.
-- Import flow updated to run automatic split before date-check and posting.
-- Posting performance improved with parallel execution using ThreadPoolExecutor.
-- Logging behavior adjusted to preserve sequential output order while using parallel posting.
-
-### Fixed
-- Latest imported transaction date extraction aligned with Firefly response path attributes.transactions[0].date.
-- Restored stable script structure after earlier regression in main/date-check integration.
+- `get_summary()` now requires `start` and `end` date parameters as mandated by the Firefly III API (TASK-003)

@@ -1,69 +1,100 @@
-# firefly-bank-importer
+# firefly-python-api
 
-I didn't quite like the built-in Firefly III import tool for several reasons, one of them being that it seemed very slow and probably very serial.
+Python client library for the [Firefly III](https://www.firefly-iii.org/) REST API.
 
-So, here's another import tool for importing bank transactions into Firefly III. This one is a Python CLI tool and a (currently really ugly) web UI for importing bank transactions from CSV exports (currently SEB and ICA formats) into [Firefly III](https://www.firefly-iii.org/) via its REST API.
+Provides a shared HTTP layer with credential management and API coverage for
+accounts, transactions, and reporting resources. Designed to be used as a
+dependency by consumer projects such as `firefly-bank-importer` and
+`firefly-bills-analyzer`.
 
-- Multi-threaded imports makes this faster than the original one
-- Discovers asset accounts from Firefly and caches them locally
-- Automatically prevents duplicate imports via latest-date filtering per account
-- Automatically splits multi-month CSV exports into monthly files
-- Dry-run mode, parallel posting, and timestamped log files
-- Web UI for folder selection, dry-run preview, live import, CSV upload, and import history
+## Features
 
-Note: The CLI does everything it's built to do, while the web UI is still a work in progress.
+- `FireflyClient(url, token)` — authenticated `requests.Session` with correct
+  headers wired up automatically
+- `load_config(env_path)` — reads `FIREFLY_URL` and `FIREFLY_TOKEN` from
+  environment or a `.env` file
+- `FireflyClient.validate_connection()` — probes `/api/v1/about` and raises
+  `FireflyConnectionError` on failure
+- `FireflyConnectionError` carries `status_code` and `response_body` (parsed
+  JSON, or `None`) when raised from a non-2xx response, letting callers
+  distinguish e.g. a 422 duplicate-name rejection from other failures
+- Account methods: `get_asset_accounts()` (paginated)
+- Transaction methods: `get_latest_transaction_date(account_id)`,
+  `create_transaction(payload)`,
+  `get_withdrawal_transactions(start, end, on_page=None)` (paginated,
+  flattens multi-split transactions, optional `on_page(page, total_pages)`
+  progress callback)
+- Reporting methods: `get_bills()`, `create_bill(payload)`, `get_budgets()`,
+  `get_budget_limits(budget_id)`, `get_categories()`, `get_summary()`
+- `TypedDict` types (`AssetAccount`, `BillData`, `BillPayload`, `BudgetData`,
+  `BudgetLimitData`, `CategoryData`, `TransactionPayload`, `TransactionRead`)
+  exported for IDE completion and `mypy` type checking
 
-## Installation
+## Requirements
 
-Requires Python ≥ 3.11 and a running Firefly III instance.
+- Python 3.11+
+- [uv](https://github.com/astral-sh/uv)
+
+## Adding to a project (git subtree)
+
+The recommended way to consume this library is as a git subtree. The library
+lives inside the consuming project at `libs/firefly-python-api/` and is
+referenced as a local path dependency — no PyPI publishing needed.
+
+**Add (first time):**
 
 ```bash
-git clone https://github.com/CmdrPrompt/firefly-bank-importer.git
-cd firefly-bank-importer
-uv sync
+git subtree add --prefix=libs/firefly-python-api \
+  https://github.com/CmdrPrompt/firefly-python-api main --squash
 ```
 
-On first CLI run, configure your Firefly III URL and API token interactively — or via the web UI settings page.
+**Reference in `pyproject.toml`:**
+
+```toml
+[project]
+dependencies = [
+    "firefly-python-api",
+]
+
+[tool.uv.sources]
+firefly-python-api = { path = "libs/firefly-python-api" }
+```
+
+**Pull updates later:**
+
+```bash
+git subtree pull --prefix=libs/firefly-python-api \
+  https://github.com/CmdrPrompt/firefly-python-api main --squash
+```
 
 ## Usage
 
-**Web UI** (recommended):
+```python
+from firefly_python_api import FireflyClient, load_config, FireflyConnectionError
 
-```bash
-uv run firefly-web
+url, token = load_config(".env")
+client = FireflyClient(url, token)
+client.validate_connection()
+
+accounts = client.get_asset_accounts()
+
+transactions = client.get_withdrawal_transactions(
+    "2024-01-01",
+    "2024-12-31",
+    on_page=lambda page, total_pages: print(f"fetched page {page}/{total_pages}"),
+)
 ```
-
-Opens at `http://127.0.0.1:8000`. Use the UI to select folders, preview imports, upload CSV files, and view history.
-
-**CLI**:
-
-```text
-uv run firefly-import <path> [--dry-run] [--ignore-latest-date-check] [--refresh-accounts]
-```
-
-| Argument | Description |
-|---|---|
-| `<path>` | Single account folder or base directory with account subfolders |
-| `--dry-run` | Log planned transactions without posting to Firefly |
-| `--ignore-latest-date-check` | Import all rows, including already-imported dates |
-| `--refresh-accounts` | Re-fetch accounts from Firefly and recreate import folders |
-
-On first run (or with `--refresh-accounts`), the tool discovers all Firefly asset accounts, caches them in `accounts_cache.json`, and creates matching import folders under `<path>`.
-
-## Supported CSV Formats
-
-| Format | Required Headers |
-|---|---|
-| SEB | `Bokföringsdatum`, `Text`, `Belopp` |
-| ICA | `Datum`, `Text`, `Typ`, `Belopp` |
 
 ## Development
 
 ```bash
-uv sync && uv run pre-commit install
-make lint && make test
+make install          # install dependencies and pre-commit hooks
+make test             # run tests with coverage
+make test-integration  # run integration tests against a live Firefly III instance
+make lint              # run ruff, mypy, bandit
+make help              # list all available targets
 ```
 
 ## License
 
-See [LICENSE](LICENSE).
+MIT
