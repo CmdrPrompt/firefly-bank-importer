@@ -3,9 +3,19 @@ name = "firefly-bank-importer"
 version = "0.1.0"
 description = "Python tool for importing bank CSV exports into Firefly III, with automatic date filtering to avoid duplicate transactions."
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "fastapi>=0.116.1",
+    "firefly-python-api",
+    "httpx>=0.28.1",
+    "python-multipart>=0.0.9",
+    "requests>=2.31",
+    "uvicorn>=0.35.0",
+]
 
-project.optional-dependencies]
+[tool.uv.sources]
+firefly-python-api = { path = "libs/firefly-python-api" }
+
+[project.optional-dependencies]
 dev = [
     "ruff",
     "mypy",
@@ -23,16 +33,54 @@ dev = [
     "httpx",
 ]
 
+[project.scripts]
+firefly-import = "firefly_bank_importer.import_firefly:main"
+firefly-import-web = "firefly_bank_importer.web_ui:main"
+
 [tool.ruff]
-line-length = 100
+line-length = 120
+target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "I"]
+select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.mypy]
 strict = true
+mypy_path = "src"
+
+[[tool.mypy.overrides]]
+module = [
+    "pytest",
+    "hypothesis",
+    "hypothesis.strategies",
+    "fastapi",
+    "fastapi.responses",
+    "fastapi.*",
+    "uvicorn",
+    "uvicorn.*",
+    "fastapi.testclient",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["firefly_bank_importer.web_ui"]
+disable_error_code = ["misc"]
+
+[[tool.mypy.overrides]]
+module = ["firefly_python_api", "firefly_python_api.*"]
+ignore_missing_imports = true
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
 
 [tool.bandit]
+targets = ["src"]
+recursive = true
 skips = []
 
 [tool.pytest.ini_options]
