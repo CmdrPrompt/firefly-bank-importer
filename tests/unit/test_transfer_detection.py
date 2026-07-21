@@ -326,3 +326,32 @@ class TestMainMultiFolderIntegration:
         assert client.create_transaction.call_count == 1
         payload = client.create_transaction.call_args.args[0]["transactions"][0]
         assert payload["type"] == "withdrawal"
+
+
+class TestPeriodScopedMultiFolderImport:
+    def test_period_restricts_import_to_matching_month_across_folders(self, tmp_path: Path) -> None:
+        folder_a = tmp_path / "kontoutdrag_Lonekonto"
+        folder_b = tmp_path / "kontoutdrag_Sparkonto"
+        folder_a.mkdir()
+        folder_b.mkdir()
+        write_seb_csv(folder_a / "2025-01.csv", [["2025-01-05", "2025-01-05", "V1", "Shop", "-50,00", "950,00"]])
+        write_seb_csv(folder_a / "2025-02.csv", [["2025-02-05", "2025-02-05", "V1", "Overforing", "-100,00", "850,00"]])
+        write_seb_csv(folder_b / "2025-02.csv", [["2025-02-05", "2025-02-05", "V1", "Overforing", "100,00", "1100,00"]])
+
+        client = make_client()
+        account_map = {"Lonekonto": 1, "Sparkonto": 2}
+        with (
+            patch.object(module, "build_account_map", return_value=(account_map, [])),
+            patch.object(module, "get_latest_transaction_date", return_value=None),
+            patch.object(module, "load_api_token", return_value="token"),
+            patch.object(module, "load_firefly_url", return_value="http://firefly.local"),
+            patch.object(module, "FireflyClient", return_value=client),
+        ):
+            main(base_folder=str(tmp_path), period="2025-02")
+
+        # Only the February transfer should be posted; the January withdrawal
+        # (folder_a, not in the selected period) must be excluded entirely.
+        assert client.create_transaction.call_count == 1
+        payload = client.create_transaction.call_args.args[0]["transactions"][0]
+        assert payload["type"] == "transfer"
+        assert payload["date"] == "2025-02-05"
