@@ -197,6 +197,46 @@ class TestOnlyMonthlyFilesImported:
         mock_csv.assert_called_once()
 
 
+class TestPeriodFilter:
+    def test_only_matching_period_file_is_processed(self, tmp_path: Path) -> None:
+        folder = tmp_path / "kontoutdrag_SEB_Lonekonto"
+        folder.mkdir()
+        write_seb_csv(folder / "2025-01.csv", [["2025-01-10", "2025-01-10", "V1", "X", "-10,00", "990,00"]])
+        write_seb_csv(folder / "2025-02.csv", [["2025-02-10", "2025-02-10", "V1", "X", "-10,00", "990,00"]])
+        client = make_client()
+        with (
+            patch.object(module, "process_csv") as mock_csv,
+            patch.object(module, "get_latest_transaction_date", return_value=None),
+        ):
+            process_folder(client, folder, ACCOUNT_MAP, dry_run=True, period="2025-02")
+        mock_csv.assert_called_once()
+        assert mock_csv.call_args[0][1] == folder / "2025-02.csv"
+
+    def test_folder_without_matching_period_file_is_skipped(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        folder = tmp_path / "kontoutdrag_SEB_Lonekonto"
+        folder.mkdir()
+        write_seb_csv(folder / "2025-01.csv", [["2025-01-10", "2025-01-10", "V1", "X", "-10,00", "990,00"]])
+        client = make_client()
+        with caplog.at_level(logging.WARNING):
+            process_folder(client, folder, ACCOUNT_MAP, dry_run=True, period="2025-02")
+        assert any("Inga CSV-filer" in r.message for r in caplog.records)
+
+    def test_no_period_processes_all_monthly_files(self, tmp_path: Path) -> None:
+        folder = tmp_path / "kontoutdrag_SEB_Lonekonto"
+        folder.mkdir()
+        write_seb_csv(folder / "2025-01.csv", [["2025-01-10", "2025-01-10", "V1", "X", "-10,00", "990,00"]])
+        write_seb_csv(folder / "2025-02.csv", [["2025-02-10", "2025-02-10", "V1", "X", "-10,00", "990,00"]])
+        client = make_client()
+        with (
+            patch.object(module, "process_csv") as mock_csv,
+            patch.object(module, "get_latest_transaction_date", return_value=None),
+        ):
+            process_folder(client, folder, ACCOUNT_MAP, dry_run=True)
+        assert mock_csv.call_count == 2
+
+
 class TestAutoSplitBeforeProcess:
     def test_non_monthly_file_is_split_first(self, tmp_path: Path) -> None:
         folder = tmp_path / "kontoutdrag_SEB_Lonekonto"

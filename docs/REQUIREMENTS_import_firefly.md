@@ -360,6 +360,17 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 4. On completion, the progress bar closes; existing summary log lines (`Summa: X ok, Y fel`, etc.) are unaffected.
 - Result: The user sees live progress during long-running imports, in both dry-run and live mode, for both single- and multi-folder runs.
 
+### UC-33: Import a single period across all accounts
+- Actor: User
+- Trigger: The user provides a `--period YYYY-MM` flag together with a base folder (UC-2, multiple account subfolders), or a single account folder (UC-1).
+- Preconditions: The period matches the `YYYY-MM` format with a valid month (01-12).
+- Main flow:
+1. The script validates the `--period` value; an invalid format aborts the run with a clear error message before any account/API work happens.
+2. For each account folder, the script restricts CSV file resolution to that folder's `<period>.csv` file only, instead of all `YYYY-MM.csv` files in the folder. Auto-split (UC-6) still runs first, so an unsplit export file is split into monthly files before the period filter is applied.
+3. Folders without a matching `<period>.csv` file are skipped with the same warning as folders with no CSV files at all.
+4. Import otherwise proceeds as in UC-2/UC-31 (multiple accounts, with cross-account transfer detection scoped to the selected period's rows only).
+- Result: Only transactions from the selected month are imported, across every account in the same run, letting the user catch up month by month while transfer-matching still compares all accounts for that period.
+
 ## 5. Functional Requirements
 
 ### FR-1 Token loading
@@ -585,6 +596,10 @@ When importing two or more account folders in the same run, the system shall col
 
 The system shall depend on `tqdm>=4.66` and wrap the transaction-posting loops in `process_csv` (single-folder path) and the multi-folder posting path (`_post_unmatched_rows`, transfer posting loop) with a `tqdm` progress bar advancing once per row processed, in both dry-run and live mode.
 
+### FR-68 Period-scoped import
+
+The script shall accept a `--period YYYY-MM` CLI flag. The system shall validate the value against the pattern `\d{4}-\d{2}` with a month component in `01`-`12`; an invalid value shall cause the script to print a clear error message and exit before any account or API work happens. When `--period` is provided, CSV file resolution for each account folder (both the single-folder path, UC-1, and the multi-folder path, UC-2) shall be restricted to that folder's `<period>.csv` file only, instead of all `YYYY-MM.csv` files matched by `MONTHLY_FILE_RE`. A folder with no `<period>.csv` file shall be skipped with the same warning used today for a folder with no CSV files at all. When `--period` is omitted, behavior is unchanged from today (all monthly files in each folder are processed).
+
 ## 6. Non-Functional Requirements
 
 ### NFR-1 Performance
@@ -698,6 +713,7 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | UC-30 | Automatically set opening balance from bank export on first import | Not implemented |
 | UC-31 | Detect and import transfers between accounts during multi-account import | Not implemented |
 | UC-32 | Show progress bar during transaction import | Not implemented |
+| UC-33 | Import a single period across all accounts | Not implemented |
 
 ### Functional Requirements
 
@@ -763,6 +779,7 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | FR-65 | Automatic opening balance detection | Not implemented |
 | FR-66 | Cross-account transfer detection | Not implemented |
 | FR-67 | tqdm progress bar dependency | Not implemented |
+| FR-68 | Period-scoped import | Not implemented |
 
 ### Non-Functional Requirements
 

@@ -179,6 +179,12 @@ def find_account_id(folder_name: str, account_map: dict[str, int]) -> int | None
 
 MONTHLY_FILE_RE = re.compile(r"^\d{4}-\d{2}\.csv$")
 _KONTOUTDRAG_RE = re.compile(r"konto", re.IGNORECASE)
+PERIOD_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+
+
+def _validate_period(period: str) -> None:
+    if not PERIOD_RE.match(period):
+        raise ValueError(f"Ogiltigt --period-varde: '{period}'. Ange formatet ÅÅÅÅ-MM (t.ex. 2025-06).")
 
 
 def _resolve_column_mapping(headers: list[str]) -> tuple[BankFormat, ColumnMapping] | None:
@@ -525,12 +531,19 @@ def process_csv(
         logging.info(f"  Hoppade over: {skipped} rader")
 
 
+def _filter_csv_files_for_period(csv_files: list[Path], period: str | None) -> list[Path]:
+    if period is None:
+        return csv_files
+    return [f for f in csv_files if f.stem == period]
+
+
 def process_folder(
     client: FireflyClient,
     folder: Path,
     account_map: dict[str, int],
     dry_run: bool = False,
     ignore_latest_date_check: bool = False,
+    period: str | None = None,
 ) -> None:
     account_id = find_account_id(folder.name, account_map)
     if not account_id:
@@ -540,6 +553,7 @@ def process_folder(
     auto_split_folder(folder)
 
     csv_files = sorted(f for f in folder.glob("*.csv") if MONTHLY_FILE_RE.match(f.name))
+    csv_files = _filter_csv_files_for_period(csv_files, period)
     if not csv_files:
         logging.warning(f"Inga CSV-filer i {folder.name}, hoppar över.")
         return
@@ -563,13 +577,16 @@ def process_folder(
         process_csv(client, csv_path, account_id, dry_run, latest_date)
 
 
-def _resolve_folder_account_and_files(folder: Path, account_map: dict[str, int]) -> tuple[int, list[Path]] | None:
+def _resolve_folder_account_and_files(
+    folder: Path, account_map: dict[str, int], period: str | None = None
+) -> tuple[int, list[Path]] | None:
     account_id = find_account_id(folder.name, account_map)
     if not account_id:
         logging.warning(f"Inget konto hittat för {folder.name}, hoppar över.")
         return None
     auto_split_folder(folder)
     csv_files = sorted(f for f in folder.glob("*.csv") if MONTHLY_FILE_RE.match(f.name))
+    csv_files = _filter_csv_files_for_period(csv_files, period)
     if not csv_files:
         logging.warning(f"Inga CSV-filer i {folder.name}, hoppar över.")
         return None
@@ -626,8 +643,9 @@ def _gather_folder_pending(
     account_map: dict[str, int],
     dry_run: bool,
     ignore_latest_date_check: bool,
+    period: str | None = None,
 ) -> list[PendingRow]:
-    resolved = _resolve_folder_account_and_files(folder, account_map)
+    resolved = _resolve_folder_account_and_files(folder, account_map, period)
     if resolved is None:
         return []
     account_id, csv_files = resolved
@@ -796,10 +814,11 @@ def _run_multi_folder_import(
     account_map: dict[str, int],
     dry_run: bool,
     ignore_latest_date_check: bool,
+    period: str | None = None,
 ) -> None:
     all_rows: list[PendingRow] = []
     for folder in folders:
-        all_rows.extend(_gather_folder_pending(client, folder, account_map, dry_run, ignore_latest_date_check))
+        all_rows.extend(_gather_folder_pending(client, folder, account_map, dry_run, ignore_latest_date_check, period))
 
     pairs, matched = _match_transfer_pairs(all_rows)
     logging.info(f"Detekterade {len(pairs)} overforing(ar) mellan konton.")
@@ -812,11 +831,11 @@ def _run_multi_folder_import(
         _post_unmatched_rows(client, unmatched, dry_run, pbar=pbar)
 
 
-def _parse_cli_args(argv: list[str]) -> tuple[str, bool, bool, bool, bool]:
+def _parse_cli_args(argv: list[str]) -> tuple[str, bool, bool, bool, bool, str | None]:
     if len(argv) < 2:
         raise ValueError(
             "Användning: python3 import_firefly.py <sökväg> "
-            "[--dry-run] [--ignore-latest-date-check] [--refresh-accounts] [--configure]\n"
+            "[--dry-run] [--ignore-latest-date-check] [--refresh-accounts] [--configure] [--period ÅÅÅÅ-MM]\n"
             "  Stödda filtyper i importmappen:\n"
             "    kontoutdrag-fil — filnamn innehåller 'konto' (t.ex. kontoutdrag_seb.csv, kontoutdrag 20260505.csv)\n"
             "    månadsfil       — filnamn matchar YYYY-MM.csv (t.ex. 2026-01.csv)"
@@ -827,12 +846,23 @@ def _parse_cli_args(argv: list[str]) -> tuple[str, bool, bool, bool, bool]:
     refresh_accounts = "--refresh-accounts" in argv
     configure = "--configure" in argv
 
+    remaining = list(argv[1:])
+    period: str | None = None
+    if "--period" in remaining:
+        idx = remaining.index("--period")
+        try:
+            period = remaining[idx + 1]
+        except IndexError as exc:
+            raise ValueError("--period kräver ett värde i formatet ÅÅÅÅ-MM.") from exc
+        _validate_period(period)
+        del remaining[idx : idx + 2]
+
     try:
-        folder = next(arg for arg in argv[1:] if not arg.startswith("--"))
+        folder = next(arg for arg in remaining if not arg.startswith("--"))
     except StopIteration as exc:
         raise ValueError("Sökväg saknas. Ange en mapp före eller efter flaggor.") from exc
 
-    return folder, dry_run, ignore_latest_date_check, refresh_accounts, configure
+    return folder, dry_run, ignore_latest_date_check, refresh_accounts, configure, period
 
 
 def main(
@@ -841,6 +871,7 @@ def main(
     ignore_latest_date_check: bool = False,
     refresh_accounts: bool = False,
     configure: bool = False,
+    period: str | None = None,
 ) -> int:
     global BLOCK_TRANSACTION_POSTS
 
@@ -852,6 +883,7 @@ def main(
                 ignore_latest_date_check,
                 refresh_accounts,
                 configure,
+                period,
             ) = _parse_cli_args(sys.argv)
         except ValueError as exc:
             print(str(exc))
@@ -887,10 +919,10 @@ def main(
     logging.info(f"Loggar till: {log_file}")
 
     if len(folders) > 1:
-        _run_multi_folder_import(client, folders, account_map, dry_run, ignore_latest_date_check)
+        _run_multi_folder_import(client, folders, account_map, dry_run, ignore_latest_date_check, period)
     else:
         for folder in folders:
-            process_folder(client, folder, account_map, dry_run, ignore_latest_date_check)
+            process_folder(client, folder, account_map, dry_run, ignore_latest_date_check, period)
 
     logging.info("Klar!")
     return 0
