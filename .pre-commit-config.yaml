@@ -12,6 +12,7 @@ repos:
     hooks:
       - id: mypy
         args: [--strict]
+        files: ^src/
         additional_dependencies:
           - pytest
           - hypothesis

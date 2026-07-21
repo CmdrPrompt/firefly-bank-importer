@@ -245,13 +245,19 @@ def auto_split_folder(folder: Path) -> None:
 
 def get_latest_transaction_date(client: FireflyClient, account_id: int) -> date | None:
     try:
-        date_str = client.get_latest_transaction_date(str(account_id))
+        transactions = client.get_transactions_by_type(
+            "withdrawal,deposit", start="2000-01-01", end=date.today().isoformat()
+        )
     except FireflyConnectionError:
         logging.warning(f"Kunde inte hamta senaste transaktion for konto {account_id}.")
         return None
-    if date_str is None:
-        return None
-    return datetime.strptime(date_str, "%Y-%m-%d").date()
+    account_id_str = str(account_id)
+    dates = [
+        datetime.strptime(tx["date"], "%Y-%m-%d").date()
+        for tx in transactions
+        if tx["source_id"] == account_id_str or tx["destination_id"] == account_id_str
+    ]
+    return max(dates) if dates else None
 
 
 def _earliest_balance_row_in_rows(

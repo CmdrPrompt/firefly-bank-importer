@@ -63,7 +63,7 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 - Actor: System
 - Preconditions: The --ignore-latest-date-check flag is not used.
 - Main flow:
-1. The script fetches the latest transaction date for the account from Firefly.
+1. The script fetches the latest withdrawal/deposit transaction date for the account from Firefly, excluding transfers.
 2. The script skips rows with date <= latest date.
 3. The script imports only newer rows.
 - Result: Reduced risk of duplicate imports.
@@ -396,7 +396,7 @@ Negative amounts shall be created as withdrawal with source_id. Non-negative amo
 Created transactions shall use currency_code SEK.
 
 ### FR-9 Latest-date lookup
-The script shall fetch the latest transaction date per account from /api/v1/accounts/{id}/transactions with limit=1.
+The script shall determine an account's latest withdrawal/deposit transaction date by calling client.get_transactions_by_type("withdrawal,deposit", start, end) (start="2000-01-01", end=today) and taking the maximum date among the returned transactions whose source_id or destination_id equals the account ID — since Firefly III's per-account endpoint (/api/v1/accounts/{id}/transactions) does not support filtering by transaction type (confirmed against a real instance: any type value is ignored). This excludes transfer transactions (UC-31/FR-66) from the duplicate-import floor, since transfers are not included in the "withdrawal,deposit" type list.
 
 ### FR-10 Ignore latest-date flag
 The --ignore-latest-date-check flag shall disable latest-date filtering.
