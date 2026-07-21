@@ -38,11 +38,15 @@ of any consumer project's configuration flow.
 
 - UC-002-1: `get_asset_accounts()` — paginated `GET /api/v1/accounts?type=asset`;
   returns list of `{"id": str, "name": str}` dicts, all pages fetched automatically.
-- UC-002-2: `get_latest_transaction_date(account_id)` —
-  `GET /api/v1/accounts/{id}/transactions?limit=1&page=1`;
-  returns an ISO date string (`YYYY-MM-DD`) or `None` if the account has no
-  transactions. The system shall truncate the raw API value
-  (`YYYY-MM-DD HH:MM:SS`) to date only (`YYYY-MM-DD`) before returning it.
+- UC-002-2: `get_latest_transaction_date(account_id, transaction_type=None)` —
+  `GET /api/v1/accounts/{id}/transactions?limit=1&page=1`, plus a
+  `type={transaction_type}` query parameter when `transaction_type` is given
+  (e.g. `"withdrawal,deposit"` to exclude transfers, per Firefly III's
+  transaction type filter). Returns an ISO date string (`YYYY-MM-DD`) or
+  `None` if no matching transaction exists. The system shall truncate the
+  raw API value (`YYYY-MM-DD HH:MM:SS`) to date only (`YYYY-MM-DD`) before
+  returning it. When `transaction_type` is omitted, behavior is unchanged
+  from today (no `type` filter, matches any transaction).
 - UC-002-3: `create_transaction(payload)` — `POST /api/v1/transactions`;
   treats HTTP 200 and 201 as success; raises `FireflyConnectionError` on any
   other status code.
@@ -52,6 +56,12 @@ of any consumer project's configuration flow.
 - UC-002-5: `delete_transaction(transaction_id)` — `DELETE /api/v1/transactions/{id}`;
   treats HTTP 204 as success; raises `FireflyConnectionError` on any other
   status code.
+- UC-002-6: A consumer needing the latest date of only ordinary
+  (non-transfer) transactions on an account — because transfer transactions
+  may be posted with dates later than yet-unprocessed withdrawal/deposit
+  rows on the same account — can call
+  `get_latest_transaction_date(account_id, transaction_type="withdrawal,deposit")`
+  to exclude transfers from the result.
 
 ### Constraints
 

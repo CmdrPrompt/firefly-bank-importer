@@ -65,10 +65,10 @@ class TestGetLatestTransactionDateErrorCases:
         result = get_latest_transaction_date(client, account_id=1)
         assert result is None
 
-    def test_passes_account_id_as_string(self) -> None:
+    def test_passes_account_id_as_string_and_excludes_transfers(self) -> None:
         client = _make_client("2025-01-15")
         get_latest_transaction_date(client, account_id=42)
-        client.get_latest_transaction_date.assert_called_once_with("42")
+        client.get_latest_transaction_date.assert_called_once_with("42", transaction_type="withdrawal,deposit")
 
 
 class TestGetLatestTransactionDateHypothesis:

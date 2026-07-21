@@ -123,6 +123,34 @@ class TestGetLatestTransactionDate:
             with pytest.raises(FireflyConnectionError):
                 client.get_latest_transaction_date("1")
 
+    def test_no_type_param_when_transaction_type_omitted(self):
+        client = make_client()
+        payload = {"data": [{"attributes": {"transactions": [{"date": "2024-03-15 00:00:00"}]}}]}
+        with patch.object(client.session, "get", return_value=mock_response(payload)) as mock_get:
+            client.get_latest_transaction_date("42")
+        mock_get.assert_called_once_with(
+            "https://firefly.example.com/api/v1/accounts/42/transactions",
+            params={"limit": 1, "page": 1},
+        )
+
+    def test_forwards_transaction_type_as_query_param(self):
+        client = make_client()
+        payload = {"data": [{"attributes": {"transactions": [{"date": "2024-03-10 00:00:00"}]}}]}
+        with patch.object(client.session, "get", return_value=mock_response(payload)) as mock_get:
+            result = client.get_latest_transaction_date("42", transaction_type="withdrawal,deposit")
+        mock_get.assert_called_once_with(
+            "https://firefly.example.com/api/v1/accounts/42/transactions",
+            params={"limit": 1, "page": 1, "type": "withdrawal,deposit"},
+        )
+        assert result == "2024-03-10"
+
+    def test_returns_none_when_no_transaction_matches_type(self):
+        client = make_client()
+        payload = {"data": []}
+        with patch.object(client.session, "get", return_value=mock_response(payload)):
+            result = client.get_latest_transaction_date("1", transaction_type="withdrawal,deposit")
+        assert result is None
+
 
 # ---------------------------------------------------------------------------
 # create_transaction

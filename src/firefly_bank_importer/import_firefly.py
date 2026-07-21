@@ -245,7 +245,7 @@ def auto_split_folder(folder: Path) -> None:
 
 def get_latest_transaction_date(client: FireflyClient, account_id: int) -> date | None:
     try:
-        date_str = client.get_latest_transaction_date(str(account_id))
+        date_str = client.get_latest_transaction_date(str(account_id), transaction_type="withdrawal,deposit")
     except FireflyConnectionError:
         logging.warning(f"Kunde inte hamta senaste transaktion for konto {account_id}.")
         return None

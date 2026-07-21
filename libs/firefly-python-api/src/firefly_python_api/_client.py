@@ -206,23 +206,32 @@ class FireflyClient:
             page += 1
         return accounts
 
-    def get_latest_transaction_date(self, account_id: str) -> str | None:
+    def get_latest_transaction_date(
+        self, account_id: str, transaction_type: str | None = None
+    ) -> str | None:
         """Return the most recent transaction date for an account.
 
         Parameters
         ----------
         account_id:
             Firefly III account ID.
+        transaction_type:
+            Optional Firefly III transaction type filter (e.g.
+            ``"withdrawal,deposit"``), forwarded as the ``type`` query
+            parameter. When omitted, no filter is applied.
 
         Returns
         -------
         str or None
-            ISO date string ``YYYY-MM-DD``, or ``None`` if the account has
-            no transactions.
+            ISO date string ``YYYY-MM-DD``, or ``None`` if no transaction
+            matches.
         """
+        params: dict[str, str | int] = {"limit": 1, "page": 1}
+        if transaction_type is not None:
+            params["type"] = transaction_type
         data = self._get(
             f"{self.url}/api/v1/accounts/{account_id}/transactions",
-            params={"limit": 1, "page": 1},
+            params=params,
         )
         if not data["data"]:
             return None

@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The duplicate-import check no longer treats a cross-account transfer transaction as the account's latest transaction. Previously, once a transfer (UC-31, TASK-054/056) had been posted with a date later than other not-yet-imported withdrawal/deposit rows on the same account, the duplicate-import check would incorrectly skip all of those earlier rows on the next run. The latest-date lookup now excludes transfers, comparing only against the account's latest withdrawal/deposit transaction (TASK-057).
 - Restored `pyproject.toml` dependencies, CLI entry points, `[tool.uv.sources]`, mypy overrides, coverage config, and `tool.ruff.line-length` (120) that were accidentally dropped when `.butler` was integrated as a submodule, and fixed the resulting TOML syntax error that broke `uv`/`make install`/`make branch-task` (TASK-052).
 - Web UI folder selection test now exercises the happy path by mocking the account cache; unresolved-folder assertion tightened to verify exact CSS class and status text (TASK-043).
 
