@@ -33,8 +33,8 @@ def _split_to_transaction_read(split: dict[str, Any]) -> TransactionRead:
     -------
     TransactionRead
         ``date`` truncated to ``YYYY-MM-DD``; ``destination_name``,
-        ``category_name``, ``source_name`` and ``source_id`` default to
-        ``None`` when absent from ``split``.
+        ``category_name``, ``source_name``, ``source_id`` and
+        ``destination_id`` default to ``None`` when absent from ``split``.
     """
     return TransactionRead(
         date=split["date"][:10],
@@ -43,6 +43,7 @@ def _split_to_transaction_read(split: dict[str, Any]) -> TransactionRead:
         category_name=split.get("category_name"),
         source_name=split.get("source_name"),
         source_id=split.get("source_id"),
+        destination_id=split.get("destination_id"),
     )
 
 
@@ -206,19 +207,13 @@ class FireflyClient:
             page += 1
         return accounts
 
-    def get_latest_transaction_date(
-        self, account_id: str, transaction_type: str | None = None
-    ) -> str | None:
+    def get_latest_transaction_date(self, account_id: str) -> str | None:
         """Return the most recent transaction date for an account.
 
         Parameters
         ----------
         account_id:
             Firefly III account ID.
-        transaction_type:
-            Optional Firefly III transaction type filter (e.g.
-            ``"withdrawal,deposit"``), forwarded as the ``type`` query
-            parameter. When omitted, no filter is applied.
 
         Returns
         -------
@@ -226,12 +221,9 @@ class FireflyClient:
             ISO date string ``YYYY-MM-DD``, or ``None`` if no transaction
             matches.
         """
-        params: dict[str, str | int] = {"limit": 1, "page": 1}
-        if transaction_type is not None:
-            params["type"] = transaction_type
         data = self._get(
             f"{self.url}/api/v1/accounts/{account_id}/transactions",
-            params=params,
+            params={"limit": 1, "page": 1},
         )
         if not data["data"]:
             return None
@@ -453,7 +445,61 @@ class FireflyClient:
 
     # ------------------------------------------------------------------
     # REQ-006 — withdrawal transactions
+    # REQ-011 — transaction fetching by type (generalized)
     # ------------------------------------------------------------------
+
+    def get_transactions_by_type(
+        self,
+        transaction_type: str,
+        start: str,
+        end: str,
+        on_page: Callable[[int, int], None] | None = None,
+    ) -> list[TransactionRead]:
+        """Return all transactions of the given type(s) in a date range, fetching every page.
+
+        Each Firefly III transaction object may contain multiple splits under
+        ``attributes.transactions``; each split is flattened into its own
+        :class:`TransactionRead` entry.
+
+        Parameters
+        ----------
+        transaction_type:
+            Firefly III transaction type filter, forwarded as-is as the
+            ``type`` query parameter. May be a comma-separated list (e.g.
+            ``"withdrawal,deposit"``).
+        start:
+            Start date in ``YYYY-MM-DD`` format.
+        end:
+            End date in ``YYYY-MM-DD`` format.
+        on_page:
+            Optional callback invoked as ``on_page(page, total_pages)`` after
+            each page has been fetched and parsed. `page` is the 1-indexed
+            page just completed. Exceptions raised by `on_page` propagate to
+            the caller and stop further page fetches.
+
+        Returns
+        -------
+        list[TransactionRead]
+            Flattened transaction splits, as returned by Firefly III (the
+            client does not additionally filter by type).
+        """
+        transactions: list[TransactionRead] = []
+        page = 1
+        while True:
+            data = self._get(
+                f"{self.url}/api/v1/transactions",
+                params={"type": transaction_type, "start": start, "end": end, "page": page},
+            )
+            for item in data["data"]:
+                for split in item["attributes"]["transactions"]:
+                    transactions.append(_split_to_transaction_read(split))
+            total_pages = data["meta"]["pagination"]["total_pages"]
+            if on_page is not None:
+                on_page(page, total_pages)
+            if page >= total_pages:
+                break
+            page += 1
+        return transactions
 
     def get_withdrawal_transactions(
         self,
@@ -463,9 +509,8 @@ class FireflyClient:
     ) -> list[TransactionRead]:
         """Return all withdrawal transactions in a date range, fetching every page.
 
-        Each Firefly III transaction object may contain multiple splits under
-        ``attributes.transactions``; each split is flattened into its own
-        :class:`TransactionRead` entry.
+        Thin wrapper around :meth:`get_transactions_by_type` with
+        ``transaction_type="withdrawal"``.
 
         Parameters
         ----------
@@ -484,20 +529,4 @@ class FireflyClient:
         list[TransactionRead]
             Flattened withdrawal transaction splits.
         """
-        transactions: list[TransactionRead] = []
-        page = 1
-        while True:
-            data = self._get(
-                f"{self.url}/api/v1/transactions",
-                params={"type": "withdrawal", "start": start, "end": end, "page": page},
-            )
-            for item in data["data"]:
-                for split in item["attributes"]["transactions"]:
-                    transactions.append(_split_to_transaction_read(split))
-            total_pages = data["meta"]["pagination"]["total_pages"]
-            if on_page is not None:
-                on_page(page, total_pages)
-            if page >= total_pages:
-                break
-            page += 1
-        return transactions
+        return self.get_transactions_by_type("withdrawal", start, end, on_page)

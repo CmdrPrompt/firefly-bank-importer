@@ -396,7 +396,7 @@ Negative amounts shall be created as withdrawal with source_id. Non-negative amo
 Created transactions shall use currency_code SEK.
 
 ### FR-9 Latest-date lookup
-The script shall fetch the latest transaction date per account from /api/v1/accounts/{id}/transactions with limit=1 and type=withdrawal,deposit, excluding transfer transactions from the result. This prevents transfer transactions (UC-31/FR-66) — which may carry a date later than yet-unimported withdrawal/deposit rows on the same account — from incorrectly suppressing import of those rows.
+The script shall determine an account's latest withdrawal/deposit transaction date by calling client.get_transactions_by_type("withdrawal,deposit", start, end) (start="2000-01-01", end=today) and taking the maximum date among the returned transactions whose source_id or destination_id equals the account ID — since Firefly III's per-account endpoint (/api/v1/accounts/{id}/transactions) does not support filtering by transaction type (confirmed against a real instance: any type value is ignored). This excludes transfer transactions (UC-31/FR-66) from the duplicate-import floor, since transfers are not included in the "withdrawal,deposit" type list.
 
 ### FR-10 Ignore latest-date flag
 The --ignore-latest-date-check flag shall disable latest-date filtering.

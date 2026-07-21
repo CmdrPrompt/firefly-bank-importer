@@ -126,3 +126,54 @@ def test_get_opening_balance_returns_balance_and_date(client: FireflyClient) -> 
     assert "date" in result
     if result["date"] is not None:
         assert len(result["date"]) == 10, f"Expected YYYY-MM-DD, got: {result['date']}"
+
+
+# ---------------------------------------------------------------------------
+# UC-011-1: get_transactions_by_type
+# ---------------------------------------------------------------------------
+
+
+@skip_if_no_credentials
+def test_get_transactions_by_type_returns_list_of_transaction_read(client: FireflyClient) -> None:
+    result = client.get_transactions_by_type(
+        "withdrawal,deposit", start="2024-01-01", end="2024-12-31"
+    )
+    assert isinstance(result, list)
+    for transaction in result:
+        assert "date" in transaction
+        assert "amount" in transaction
+        assert "destination_id" in transaction
+        assert transaction["destination_id"] is None or isinstance(
+            transaction["destination_id"], str
+        )
+
+
+@skip_if_no_credentials
+def test_get_withdrawal_transactions_still_works_after_refactor(client: FireflyClient) -> None:
+    result = client.get_withdrawal_transactions(start="2024-01-01", end="2024-12-31")
+    assert isinstance(result, list)
+
+
+# ---------------------------------------------------------------------------
+# UC-004-5: get_transactions_for_account, get_budget_limits
+# ---------------------------------------------------------------------------
+
+
+@skip_if_no_credentials
+def test_get_transactions_for_account_returns_list_of_ids(client: FireflyClient) -> None:
+    accounts = client.get_asset_accounts()
+    account_id = accounts[0]["id"]
+    result = client.get_transactions_for_account(account_id)
+    assert isinstance(result, list)
+    for transaction_id in result:
+        assert isinstance(transaction_id, str)
+
+
+@skip_if_no_credentials
+def test_get_budget_limits_returns_list(client: FireflyClient) -> None:
+    budgets = client.get_budgets()
+    if not budgets:
+        pytest.skip("No budgets on the configured Firefly III instance")
+    budget_id = budgets[0]["id"]
+    result = client.get_budget_limits(budget_id)
+    assert isinstance(result, list)

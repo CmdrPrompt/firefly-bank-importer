@@ -38,15 +38,16 @@ of any consumer project's configuration flow.
 
 - UC-002-1: `get_asset_accounts()` — paginated `GET /api/v1/accounts?type=asset`;
   returns list of `{"id": str, "name": str}` dicts, all pages fetched automatically.
-- UC-002-2: `get_latest_transaction_date(account_id, transaction_type=None)` —
-  `GET /api/v1/accounts/{id}/transactions?limit=1&page=1`, plus a
-  `type={transaction_type}` query parameter when `transaction_type` is given
-  (e.g. `"withdrawal,deposit"` to exclude transfers, per Firefly III's
-  transaction type filter). Returns an ISO date string (`YYYY-MM-DD`) or
-  `None` if no matching transaction exists. The system shall truncate the
-  raw API value (`YYYY-MM-DD HH:MM:SS`) to date only (`YYYY-MM-DD`) before
-  returning it. When `transaction_type` is omitted, behavior is unchanged
-  from today (no `type` filter, matches any transaction).
+- UC-002-2: `get_latest_transaction_date(account_id)` —
+  `GET /api/v1/accounts/{id}/transactions?limit=1&page=1`;
+  returns an ISO date string (`YYYY-MM-DD`) or `None` if the account has no
+  transactions. The system shall truncate the raw API value
+  (`YYYY-MM-DD HH:MM:SS`) to date only (`YYYY-MM-DD`) before returning it.
+  This endpoint does not support filtering by transaction type — confirmed
+  against a real Firefly III instance, passing any `type` value (including
+  invalid ones) has no effect and always returns the same unfiltered latest
+  transaction. Consumers needing a type-filtered latest date must use
+  `get_transactions_by_type` (REQ-011) instead.
 - UC-002-3: `create_transaction(payload)` — `POST /api/v1/transactions`;
   treats HTTP 200 and 201 as success; raises `FireflyConnectionError` on any
   other status code.
@@ -56,12 +57,11 @@ of any consumer project's configuration flow.
 - UC-002-5: `delete_transaction(transaction_id)` — `DELETE /api/v1/transactions/{id}`;
   treats HTTP 204 as success; raises `FireflyConnectionError` on any other
   status code.
-- UC-002-6: A consumer needing the latest date of only ordinary
-  (non-transfer) transactions on an account — because transfer transactions
-  may be posted with dates later than yet-unprocessed withdrawal/deposit
-  rows on the same account — can call
-  `get_latest_transaction_date(account_id, transaction_type="withdrawal,deposit")`
-  to exclude transfers from the result.
+- UC-002-6 (removed, TASK-016): a `transaction_type` parameter on
+  `get_latest_transaction_date` was added in TASK-015 and reverted here,
+  since the underlying endpoint ignores it (see UC-002-2 above). Consumers
+  needing a type-filtered latest date must use `get_transactions_by_type`
+  (REQ-011) instead.
 
 ### Constraints
 
@@ -101,6 +101,11 @@ of any consumer project's configuration flow.
   `None` for the first account returned by `get_asset_accounts()`.
 - UC-004-4: `get_bills()`, `get_budgets()`, `get_categories()`, and `get_summary()`
   return without error.
+- UC-004-5: `get_transactions_for_account(account_id)` returns a list of
+  transaction ID strings for the first account returned by
+  `get_asset_accounts()`, and `get_budget_limits(budget_id)` returns a list
+  for the first budget returned by `get_budgets()` (skipped when no budget
+  exists), both without error.
 
 ### Constraints
 
@@ -317,3 +322,39 @@ clearing and re-importing transaction history, without reimplementing the HTTP c
 - No new runtime dependencies.
 - `mypy --strict` must pass.
 - Unit test coverage must not drop below baseline.
+
+## REQ-011 Transaction Fetching by Type (generalized)
+
+**As a** consumer application (firefly-bank-importer),
+**I want** a method that returns transactions of one or more given types in a date range,
+including both source and destination account IDs,
+**so that** I can compute an account-specific "latest transaction date" filtered by type
+myself — since `GET /api/v1/accounts/{id}/transactions` does not support a `type` filter
+(confirmed against a real Firefly III instance: passing any `type` value, including
+invalid ones, has no effect and always returns the same unfiltered latest transaction),
+while the global `GET /api/v1/transactions?type=...` endpoint does filter correctly
+(also confirmed against a real instance, including with a comma-separated type list).
+
+### Use cases
+
+- UC-011-1: `get_transactions_by_type(transaction_type, start, end, on_page=None)` —
+  paginated `GET /api/v1/transactions?type={transaction_type}&start=YYYY-MM-DD&end=YYYY-MM-DD&page=N`;
+  accepts a comma-separated `transaction_type` (e.g. `"withdrawal,deposit"`); follows all
+  pages until `total_pages` is reached; returns `list[TransactionRead]`, using the same
+  split-flattening as `get_withdrawal_transactions`. The `on_page` callback behaves as in
+  `get_withdrawal_transactions` (REQ-008).
+- UC-011-2: `TransactionRead` gains a `destination_id: str | None` field, alongside the
+  existing `source_id`, so callers can match transactions where the account of interest is
+  the destination (e.g. deposits), not just the source. Defaults to `None` when absent from
+  the API response, per the same rule as the other optional fields (UC-006-3, UC-006-5).
+- UC-011-3: `get_withdrawal_transactions(start, end, on_page=None)` is reimplemented in
+  terms of `get_transactions_by_type("withdrawal", start, end, on_page)`. Its public
+  signature and behavior are unchanged — this is an internal refactor, not a breaking
+  change.
+
+### Constraints
+
+- No breaking changes to `get_withdrawal_transactions`'s public signature or behavior.
+- No new runtime dependencies.
+- `mypy --strict` must pass.
+- Unit test coverage ≥ 90%, no regression.

@@ -43,6 +43,9 @@ def _split_dict(draw: st.DrawFn) -> dict[str, object]:
     source_id = draw(_optional_name)
     if source_id is not None or draw(st.booleans()):
         split["source_id"] = source_id
+    destination_id = draw(_optional_name)
+    if destination_id is not None or draw(st.booleans()):
+        split["destination_id"] = destination_id
     return split
 
 
@@ -76,11 +79,13 @@ class TestSplitToTransactionRead:
         split["category_name"] = "Some Category"
         split["source_name"] = "Checking Account"
         split["source_id"] = "42"
+        split["destination_id"] = "43"
         result = _split_to_transaction_read(split)
         assert result["destination_name"] == "Some Shop"
         assert result["category_name"] == "Some Category"
         assert result["source_name"] == "Checking Account"
         assert result["source_id"] == "42"
+        assert result["destination_id"] == "43"
 
     @given(_split_dict())
     def test_missing_source_name_defaults_to_none(self, split: dict[str, object]) -> None:
@@ -93,3 +98,9 @@ class TestSplitToTransactionRead:
         split.pop("source_id", None)
         result = _split_to_transaction_read(split)
         assert result["source_id"] is None
+
+    @given(_split_dict())
+    def test_missing_destination_id_defaults_to_none(self, split: dict[str, object]) -> None:
+        split.pop("destination_id", None)
+        result = _split_to_transaction_read(split)
+        assert result["destination_id"] is None

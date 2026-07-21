@@ -123,34 +123,6 @@ class TestGetLatestTransactionDate:
             with pytest.raises(FireflyConnectionError):
                 client.get_latest_transaction_date("1")
 
-    def test_no_type_param_when_transaction_type_omitted(self):
-        client = make_client()
-        payload = {"data": [{"attributes": {"transactions": [{"date": "2024-03-15 00:00:00"}]}}]}
-        with patch.object(client.session, "get", return_value=mock_response(payload)) as mock_get:
-            client.get_latest_transaction_date("42")
-        mock_get.assert_called_once_with(
-            "https://firefly.example.com/api/v1/accounts/42/transactions",
-            params={"limit": 1, "page": 1},
-        )
-
-    def test_forwards_transaction_type_as_query_param(self):
-        client = make_client()
-        payload = {"data": [{"attributes": {"transactions": [{"date": "2024-03-10 00:00:00"}]}}]}
-        with patch.object(client.session, "get", return_value=mock_response(payload)) as mock_get:
-            result = client.get_latest_transaction_date("42", transaction_type="withdrawal,deposit")
-        mock_get.assert_called_once_with(
-            "https://firefly.example.com/api/v1/accounts/42/transactions",
-            params={"limit": 1, "page": 1, "type": "withdrawal,deposit"},
-        )
-        assert result == "2024-03-10"
-
-    def test_returns_none_when_no_transaction_matches_type(self):
-        client = make_client()
-        payload = {"data": []}
-        with patch.object(client.session, "get", return_value=mock_response(payload)):
-            result = client.get_latest_transaction_date("1", transaction_type="withdrawal,deposit")
-        assert result is None
-
 
 # ---------------------------------------------------------------------------
 # create_transaction
@@ -345,6 +317,7 @@ class TestGetWithdrawalTransactions:
                                 "category_name": "Groceries",
                                 "source_name": "Checking Account",
                                 "source_id": "7",
+                                "destination_id": "9",
                             }
                         ]
                     }
@@ -371,6 +344,7 @@ class TestGetWithdrawalTransactions:
                 "category_name": "Groceries",
                 "source_name": "Checking Account",
                 "source_id": "7",
+                "destination_id": "9",
             }
         ]
 
@@ -443,6 +417,7 @@ class TestGetWithdrawalTransactions:
                 "category_name": "Misc",
                 "source_name": None,
                 "source_id": None,
+                "destination_id": None,
             },
             {
                 "date": "2024-02-05",
@@ -451,6 +426,7 @@ class TestGetWithdrawalTransactions:
                 "category_name": "Misc",
                 "source_name": None,
                 "source_id": None,
+                "destination_id": None,
             },
         ]
 
@@ -512,6 +488,7 @@ class TestGetWithdrawalTransactions:
                 "category_name": None,
                 "source_name": None,
                 "source_id": None,
+                "destination_id": None,
             }
         ]
 
@@ -575,6 +552,7 @@ class TestGetWithdrawalTransactions:
                 "category_name": None,
                 "source_name": None,
                 "source_id": None,
+                "destination_id": None,
             }
         ]
 
@@ -623,6 +601,119 @@ class TestGetWithdrawalTransactions:
             with pytest.raises(ValueError, match="boom"):
                 client.get_withdrawal_transactions("2024-01-01", "2024-12-31", on_page=on_page)
         assert mock_get.call_count == 1
+
+
+# ---------------------------------------------------------------------------
+# get_transactions_by_type
+# ---------------------------------------------------------------------------
+
+
+class TestGetTransactionsByType:
+    def test_forwards_transaction_type_as_type_param(self):
+        client = make_client()
+        payload = {
+            "data": [
+                {
+                    "attributes": {
+                        "transactions": [
+                            {
+                                "date": "2024-03-15T00:00:00+00:00",
+                                "amount": "42.50",
+                                "destination_name": "Grocery Store",
+                                "category_name": "Groceries",
+                                "source_name": "Checking Account",
+                                "source_id": "7",
+                                "destination_id": "9",
+                            }
+                        ]
+                    }
+                }
+            ],
+            "meta": {"pagination": {"total_pages": 1}},
+        }
+        with patch.object(client.session, "get", return_value=mock_response(payload)) as mock_get:
+            result = client.get_transactions_by_type(
+                "withdrawal,deposit", "2024-01-01", "2024-12-31"
+            )
+        mock_get.assert_called_once_with(
+            "https://firefly.example.com/api/v1/transactions",
+            params={
+                "type": "withdrawal,deposit",
+                "start": "2024-01-01",
+                "end": "2024-12-31",
+                "page": 1,
+            },
+        )
+        assert result == [
+            {
+                "date": "2024-03-15",
+                "amount": "42.50",
+                "destination_name": "Grocery Store",
+                "category_name": "Groceries",
+                "source_name": "Checking Account",
+                "source_id": "7",
+                "destination_id": "9",
+            }
+        ]
+
+    def test_fetches_all_pages_and_invokes_on_page(self):
+        client = make_client()
+
+        def make_page(total_pages: int) -> dict:
+            return {
+                "data": [
+                    {
+                        "attributes": {
+                            "transactions": [
+                                {"date": "2024-01-05T10:00:00+00:00", "amount": "10.00"}
+                            ]
+                        }
+                    }
+                ],
+                "meta": {"pagination": {"total_pages": total_pages}},
+            }
+
+        pages = [make_page(2), make_page(2)]
+        on_page = MagicMock()
+        with patch.object(
+            client.session, "get", side_effect=[mock_response(p) for p in pages]
+        ) as mock_get:
+            result = client.get_transactions_by_type(
+                "deposit", "2024-01-01", "2024-12-31", on_page=on_page
+            )
+        assert mock_get.call_count == 2
+        assert on_page.call_args_list == [call(1, 2), call(2, 2)]
+        assert len(result) == 2
+
+    def test_returns_empty_list_when_no_transactions(self):
+        client = make_client()
+        payload = {"data": [], "meta": {"pagination": {"total_pages": 1}}}
+        with patch.object(client.session, "get", return_value=mock_response(payload)):
+            result = client.get_transactions_by_type("deposit", "2024-01-01", "2024-12-31")
+        assert result == []
+
+    def test_raises_on_http_error(self):
+        client = make_client()
+        resp = MagicMock()
+        resp.raise_for_status.side_effect = requests.HTTPError("500")
+        with patch.object(client.session, "get", return_value=resp):
+            with pytest.raises(FireflyConnectionError):
+                client.get_transactions_by_type("deposit", "2024-01-01", "2024-12-31")
+
+    def test_get_withdrawal_transactions_delegates_to_get_transactions_by_type(self):
+        client = make_client()
+        payload = {"data": [], "meta": {"pagination": {"total_pages": 1}}}
+        with patch.object(client.session, "get", return_value=mock_response(payload)) as mock_get:
+            client.get_withdrawal_transactions("2024-01-01", "2024-12-31")
+        mock_get.assert_called_once_with(
+            "https://firefly.example.com/api/v1/transactions",
+            params={
+                "type": "withdrawal",
+                "start": "2024-01-01",
+                "end": "2024-12-31",
+                "page": 1,
+            },
+        )
 
 
 # ---------------------------------------------------------------------------
