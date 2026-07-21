@@ -106,24 +106,40 @@ class TestChooseCandidate:
         ]
         assert _choose_candidate(rows[0], rows, [1, 2]) is None
 
+    def test_single_near_day_candidate_requires_overlap_to_be_chosen(self) -> None:
+        rows = [
+            row(1, "2025-05-09", "ALY DACK", "-1890.00"),
+            row(2, "2025-05-12", "ALY DACKBYTE", "1890.00"),
+        ]
+        assert _choose_candidate(rows[0], rows, [1]) == 1
+
+    def test_single_near_day_candidate_without_overlap_is_not_chosen(self) -> None:
+        rows = [
+            row(1, "2025-07-02", "THOMAS LINDQ", "-5000.00"),
+            row(2, "2025-07-03", "WYK47R AMORT", "5000.00"),
+        ]
+        assert _choose_candidate(rows[0], rows, [1]) is None
+
+    def test_exact_same_day_candidate_preferred_over_near_day_candidate(self) -> None:
+        rows = [
+            row(1, "2025-01-05", "X", "-100.00"),
+            row(2, "2025-01-05", "Unrelated", "100.00"),
+            row(3, "2025-01-06", "Unrelated too", "100.00"),
+        ]
+        assert _choose_candidate(rows[0], rows, [1, 2]) == 1
+
 
 # ---------------------------------------------------------------------------
 # _match_transfer_pairs()
 # ---------------------------------------------------------------------------
 
 
-class TestMatchTransferPairsSameBank:
-    def test_matches_same_day_same_bank(self) -> None:
-        rows = [row(1, "2025-01-05", "Overforing", "-100.00"), row(2, "2025-01-05", "Overforing", "100.00")]
+class TestMatchTransferPairsSameDay:
+    def test_matches_same_day_on_amount_alone(self) -> None:
+        rows = [row(1, "2025-01-05", "Overforing", "-100.00"), row(2, "2025-01-05", "Unrelated text", "100.00")]
         pairs, matched = _match_transfer_pairs(rows)
         assert pairs == [(0, 1)]
         assert matched == {0, 1}
-
-    def test_does_not_match_different_day_same_bank(self) -> None:
-        rows = [row(1, "2025-01-05", "X", "-100.00"), row(2, "2025-01-06", "Y", "100.00")]
-        pairs, matched = _match_transfer_pairs(rows)
-        assert pairs == []
-        assert matched == set()
 
     def test_does_not_match_same_account(self) -> None:
         rows = [row(1, "2025-01-05", "X", "-100.00"), row(1, "2025-01-05", "Y", "100.00")]
@@ -131,22 +147,44 @@ class TestMatchTransferPairsSameBank:
         assert pairs == []
 
 
-class TestMatchTransferPairsCrossBank:
-    def test_matches_within_two_days_different_bank(self) -> None:
+class TestMatchTransferPairsNearDay:
+    def test_matches_within_three_days_with_text_overlap(self) -> None:
         rows = [
-            row(1, "2025-01-05", "X", "-100.00", bank_format="seb"),
-            row(2, "2025-01-07", "Y", "100.00", bank_format="ica"),
+            row(1, "2025-05-09", "ALY DACK", "-1890.00", bank_format="seb"),
+            row(2, "2025-05-12", "ALY DACKBYTE", "1890.00", bank_format="seb"),
         ]
         pairs, matched = _match_transfer_pairs(rows)
         assert pairs == [(0, 1)]
 
-    def test_does_not_match_beyond_two_days_different_bank(self) -> None:
+    def test_does_not_match_within_three_days_without_text_overlap(self) -> None:
         rows = [
-            row(1, "2025-01-05", "X", "-100.00", bank_format="seb"),
-            row(2, "2025-01-08", "Y", "100.00", bank_format="ica"),
+            row(1, "2025-07-02", "THOMAS LINDQ", "-5000.00", bank_format="seb"),
+            row(2, "2025-07-03", "WYK47R AMORT", "5000.00", bank_format="seb"),
         ]
         pairs, matched = _match_transfer_pairs(rows)
         assert pairs == []
+        assert matched == set()
+
+    def test_does_not_match_beyond_three_days_even_with_text_overlap(self) -> None:
+        rows = [
+            row(1, "2025-01-05", "Overforing sparkonto", "-100.00", bank_format="seb"),
+            row(2, "2025-01-09", "Overforing sparkonto", "100.00", bank_format="ica"),
+        ]
+        pairs, matched = _match_transfer_pairs(rows)
+        assert pairs == []
+
+    def test_same_bank_and_different_bank_treated_identically(self) -> None:
+        same_bank_rows = [
+            row(1, "2025-01-05", "Overforing", "-100.00", bank_format="seb"),
+            row(2, "2025-01-07", "Overforing", "100.00", bank_format="seb"),
+        ]
+        different_bank_rows = [
+            row(1, "2025-01-05", "Overforing", "-100.00", bank_format="seb"),
+            row(2, "2025-01-07", "Overforing", "100.00", bank_format="ica"),
+        ]
+        same_pairs, _ = _match_transfer_pairs(same_bank_rows)
+        diff_pairs, _ = _match_transfer_pairs(different_bank_rows)
+        assert same_pairs == diff_pairs == [(0, 1)]
 
 
 class TestMatchTransferPairsAmbiguous:
