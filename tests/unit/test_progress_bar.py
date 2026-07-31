@@ -173,8 +173,8 @@ class TestPostUnmatchedRowsProgressBar:
         client = make_client()
         pbar = FakeTqdm(total=2)
         rows = [
-            PendingRow(1, "2025-01-05", "X", "-10.00", "seb", date(2025, 1, 5)),
-            PendingRow(2, "2025-01-05", "Y", "20.00", "seb", date(2025, 1, 5)),
+            PendingRow(1, "Account A", "2025-01-05", "X", "-10.00", "seb", date(2025, 1, 5)),
+            PendingRow(2, "Account B", "2025-01-05", "Y", "20.00", "seb", date(2025, 1, 5)),
         ]
         _post_unmatched_rows(client, rows, dry_run=True, pbar=cast(Any, pbar))
         assert pbar.updates == 2

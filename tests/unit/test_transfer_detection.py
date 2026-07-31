@@ -47,6 +47,7 @@ def write_ica_csv(path: Path, rows: list[list[str]]) -> None:
 def row(account_id: int, iso_date: str, description: str, amount: str, bank_format: str = "seb") -> PendingRow:
     return PendingRow(
         account_id=account_id,
+        account_name=str(account_id),
         iso_date=iso_date,
         description=description,
         amount=amount,

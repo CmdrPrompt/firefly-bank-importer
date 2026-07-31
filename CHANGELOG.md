@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Import now shows a `tqdm` progress bar while posting transactions, in both dry-run and live mode, for single-folder and multi-folder runs (TASK-055).
 - Widened the cross-account transfer matching window (TASK-054) to a unified 0–3 days regardless of bank, replacing the previous same-bank-only-same-day / cross-bank-2-day rule. Same-day matches still work on amount alone; matches 1–3 days apart now require the two rows' descriptions to overlap (case-insensitive substring), so unrelated transactions that coincidentally share an amount are no longer paired just because they're the only same-amount candidate within the window (TASK-056).
 - New `--period YYYY-MM` flag imports a single month's `YYYY-MM.csv` file across all account folders in one run, instead of every monthly file in each folder. Cross-account transfer detection still runs, scoped to that month's rows. Folders without a matching file for the period are skipped like today's "no CSV files" case (TASK-058).
+- Transaction log lines now show the Firefly account name instead of its numeric ID, for both withdrawal/deposit rows (`[OK]/[DRY RUN] [<account name>] [<type>] ...`) and cross-account transfers (`... | <source name> -> <destination name> | ...`), falling back to the numeric ID if a name can't be resolved. The same format appears in both the terminal and the log file (TASK-059).
+- Every import run now logs the total elapsed time (`H:MM:SS`) and the average time per transaction (in seconds) as the final lines of the run, after "Klar!"; the average line is omitted when no transactions were attempted (TASK-059).
 
 ### Fixed
 

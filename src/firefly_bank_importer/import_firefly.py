@@ -4,10 +4,11 @@ import json
 import logging
 import re
 import sys
+import time
 from collections import defaultdict
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, NamedTuple, TypedDict, cast
 
@@ -41,6 +42,7 @@ class PendingRow(NamedTuple):
     """
 
     account_id: int
+    account_name: str
     iso_date: str
     description: str
     amount: str
@@ -175,6 +177,13 @@ def find_account_id(folder_name: str, account_map: dict[str, int]) -> int | None
     matches.sort(key=lambda x: len(x[0]), reverse=True)
     logging.info(f"  Flera kontomatchningar för '{folder_name}': {[m[0] for m in matches]}. Väljer '{matches[0][0]}'.")
     return matches[0][1]
+
+
+def _resolve_account_name(account_id: int, account_map: dict[str, int]) -> str:
+    for name, aid in account_map.items():
+        if aid == account_id:
+            return name
+    return str(account_id)
 
 
 MONTHLY_FILE_RE = re.compile(r"^\d{4}-\d{2}\.csv$")
@@ -375,8 +384,8 @@ def _build_transaction_payload(date: str, description: str, amount: float, accou
     }
 
 
-def _log_tx_result(transaction_type: str, amount_abs: float, date: str, description: str) -> None:
-    logging.info(f"  [OK] [{transaction_type}] {amount_abs:.2f} SEK | {date} | {description}")
+def _log_tx_result(transaction_type: str, amount_abs: float, date: str, description: str, account_name: str) -> None:
+    logging.info(f"  [OK] [{account_name}] [{transaction_type}] {amount_abs:.2f} SEK | {date} | {description}")
 
 
 def create_transaction(
@@ -387,15 +396,18 @@ def create_transaction(
     account_id: int,
     dry_run: bool = False,
     log: bool = True,
+    account_name: str | None = None,
 ) -> tuple[str, float] | None:
     parsed_amount = parse_amount(str(amount))
     payload = _build_transaction_payload(date, description, parsed_amount, account_id)
     transaction_type = payload["type"]
     amount_abs = abs(parsed_amount)
+    display_name = account_name if account_name is not None else str(account_id)
 
     if dry_run:
         logging.info(
-            "  [DRY RUN] [%s] %.2f SEK | %s | %s",
+            "  [DRY RUN] [%s] [%s] %.2f SEK | %s | %s",
+            display_name,
             transaction_type,
             amount_abs,
             date,
@@ -409,7 +421,7 @@ def create_transaction(
     client.create_transaction({"transactions": [payload]})
 
     if log:
-        _log_tx_result(transaction_type, amount_abs, date, description)
+        _log_tx_result(transaction_type, amount_abs, date, description, display_name)
 
     return transaction_type, amount_abs
 
@@ -442,15 +454,16 @@ def _submit_batch(
     executor: ThreadPoolExecutor,
     client: FireflyClient,
     account_id: int,
+    account_name: str,
     batch: list[PendingTransaction],
 ) -> list[Any]:
     return [
-        executor.submit(create_transaction, client, tx_date, desc, amount, account_id, False, log=False)
+        executor.submit(create_transaction, client, tx_date, desc, amount, account_id, False, False, account_name)
         for tx_date, desc, amount in batch
     ]
 
 
-def _handle_batch_result(fut: Any, tx_date: str, desc: str, pbar: "tqdm[Any] | None") -> bool:
+def _handle_batch_result(fut: Any, tx_date: str, desc: str, account_name: str, pbar: "tqdm[Any] | None") -> bool:
     """Returns True on success, False on error/None result. Always advances pbar."""
     try:
         result = fut.result()
@@ -464,7 +477,7 @@ def _handle_batch_result(fut: Any, tx_date: str, desc: str, pbar: "tqdm[Any] | N
     if result is None:
         return False
     transaction_type, amount_abs = result
-    _log_tx_result(transaction_type, amount_abs, tx_date, desc)
+    _log_tx_result(transaction_type, amount_abs, tx_date, desc, account_name)
     return True
 
 
@@ -472,16 +485,18 @@ def _run_threaded_import(
     client: FireflyClient,
     pending: list[PendingTransaction],
     account_id: int,
+    account_name: str | None = None,
     pbar: "tqdm[Any] | None" = None,
 ) -> None:
+    display_name = account_name if account_name is not None else str(account_id)
     ok = 0
     errors = 0
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         for batch_start in range(0, len(pending), MAX_WORKERS):
             batch = pending[batch_start : batch_start + MAX_WORKERS]
-            futures = _submit_batch(executor, client, account_id, batch)
+            futures = _submit_batch(executor, client, account_id, display_name, batch)
             for fut, (tx_date, desc, _amount) in zip(futures, batch, strict=True):
-                if _handle_batch_result(fut, tx_date, desc, pbar):
+                if _handle_batch_result(fut, tx_date, desc, display_name, pbar):
                     ok += 1
                 else:
                     errors += 1
@@ -494,7 +509,8 @@ def process_csv(
     account_id: int,
     dry_run: bool = False,
     latest_date: date | None = None,
-) -> None:
+    account_name: str | None = None,
+) -> int:
     with open(csv_path, encoding="utf-8-sig") as f:
         reader = csv.reader(f, delimiter=";")
         headers = next(reader)
@@ -502,7 +518,7 @@ def process_csv(
         resolved = _resolve_column_mapping(headers)
         if resolved is None:
             logging.error(f"Okant CSV-format i {csv_path.name}. Hittade headers: {headers}")
-            return
+            return 0
         csv_format, mapping = resolved
 
         datum_idx = mapping.date_idx
@@ -520,15 +536,19 @@ def process_csv(
     if dry_run:
         with tqdm(total=len(pending), desc=f"{csv_path.name} (dry-run)", unit="rad") as pbar:
             for date, description, amount in pending:
-                create_transaction(client, date, description, amount, account_id, dry_run=True)
+                create_transaction(
+                    client, date, description, amount, account_id, dry_run=True, account_name=account_name
+                )
                 pbar.update(1)
         logging.info(f"  Summa: {len(pending)} transaktioner")
     else:
         with tqdm(total=len(pending), desc=csv_path.name, unit="rad") as pbar:
-            _run_threaded_import(client, pending, account_id, pbar=pbar)
+            _run_threaded_import(client, pending, account_id, account_name=account_name, pbar=pbar)
 
     if skipped:
         logging.info(f"  Hoppade over: {skipped} rader")
+
+    return len(pending)
 
 
 def _filter_csv_files_for_period(csv_files: list[Path], period: str | None) -> list[Path]:
@@ -544,11 +564,11 @@ def process_folder(
     dry_run: bool = False,
     ignore_latest_date_check: bool = False,
     period: str | None = None,
-) -> None:
+) -> int:
     account_id = find_account_id(folder.name, account_map)
     if not account_id:
         logging.warning(f"Inget konto hittat för {folder.name}, hoppar över.")
-        return
+        return 0
 
     auto_split_folder(folder)
 
@@ -556,8 +576,9 @@ def process_folder(
     csv_files = _filter_csv_files_for_period(csv_files, period)
     if not csv_files:
         logging.warning(f"Inga CSV-filer i {folder.name}, hoppar över.")
-        return
+        return 0
 
+    account_name = _resolve_account_name(account_id, account_map)
     opening_balance_floor = _apply_auto_opening_balance(client, account_id, csv_files, dry_run)
 
     latest_date = None
@@ -572,9 +593,11 @@ def process_folder(
     elif latest_date is None:
         logging.info("  Ingen tidigare transaktion hittades i Firefly.")
 
+    transaction_count = 0
     for csv_path in csv_files:
         logging.info(f"Bearbetar: {csv_path.name}")
-        process_csv(client, csv_path, account_id, dry_run, latest_date)
+        transaction_count += process_csv(client, csv_path, account_id, dry_run, latest_date, account_name=account_name)
+    return transaction_count
 
 
 def _resolve_folder_account_and_files(
@@ -610,7 +633,7 @@ def _compute_latest_date_floor(
 
 
 def _collect_csv_pending_rows(
-    csv_path: Path, account_id: int, latest_date: date | None
+    csv_path: Path, account_id: int, account_name: str, latest_date: date | None
 ) -> tuple[list[PendingRow], int]:
     with open(csv_path, encoding="utf-8-sig") as f:
         reader = csv.reader(f, delimiter=";")
@@ -631,7 +654,7 @@ def _collect_csv_pending_rows(
             bank_format.normalise_date,
         )
     rows = [
-        PendingRow(account_id, d, desc, amt, bank_format.name, datetime.strptime(d, "%Y-%m-%d").date())
+        PendingRow(account_id, account_name, d, desc, amt, bank_format.name, datetime.strptime(d, "%Y-%m-%d").date())
         for d, desc, amt in pending
     ]
     return rows, skipped
@@ -649,6 +672,7 @@ def _gather_folder_pending(
     if resolved is None:
         return []
     account_id, csv_files = resolved
+    account_name = _resolve_account_name(account_id, account_map)
     latest_date = _compute_latest_date_floor(client, account_id, csv_files, dry_run, ignore_latest_date_check)
 
     logging.info(f"Konto ID {account_id}: {folder.name}")
@@ -661,7 +685,7 @@ def _gather_folder_pending(
     total_skipped = 0
     for csv_path in csv_files:
         logging.info(f"Bearbetar: {csv_path.name}")
-        rows, skipped = _collect_csv_pending_rows(csv_path, account_id, latest_date)
+        rows, skipped = _collect_csv_pending_rows(csv_path, account_id, account_name, latest_date)
         all_rows.extend(rows)
         total_skipped += skipped
     if total_skipped:
@@ -768,11 +792,17 @@ def _build_transfer_payload(a: PendingRow, b: PendingRow) -> dict[str, str]:
 
 
 def _post_transfer(
-    client: FireflyClient, payload: dict[str, str], dry_run: bool, pbar: "tqdm[Any] | None" = None
+    client: FireflyClient,
+    payload: dict[str, str],
+    dry_run: bool,
+    pbar: "tqdm[Any] | None" = None,
+    source_name: str | None = None,
+    destination_name: str | None = None,
 ) -> None:
     summary = (
         f"{payload['amount']} SEK | {payload['date']} | "
-        f"{payload['source_id']} -> {payload['destination_id']} | {payload['description']}"
+        f"{source_name or payload['source_id']} -> {destination_name or payload['destination_id']} | "
+        f"{payload['description']}"
     )
     try:
         if dry_run:
@@ -795,17 +825,22 @@ def _post_unmatched_rows(
     client: FireflyClient, rows: list[PendingRow], dry_run: bool, pbar: "tqdm[Any] | None" = None
 ) -> None:
     by_account: dict[int, list[PendingTransaction]] = defaultdict(list)
+    account_names: dict[int, str] = {}
     for row in rows:
         by_account[row.account_id].append((row.iso_date, row.description, row.amount))
+        account_names[row.account_id] = row.account_name
     for account_id, pending in by_account.items():
+        account_name = account_names[account_id]
         if dry_run:
             for tx_date, description, amount in pending:
-                create_transaction(client, tx_date, description, amount, account_id, dry_run=True)
+                create_transaction(
+                    client, tx_date, description, amount, account_id, dry_run=True, account_name=account_name
+                )
                 if pbar is not None:
                     pbar.update(1)
-            logging.info(f"  Konto {account_id}: {len(pending)} transaktioner")
+            logging.info(f"  Konto {account_name}: {len(pending)} transaktioner")
         else:
-            _run_threaded_import(client, pending, account_id, pbar=pbar)
+            _run_threaded_import(client, pending, account_id, account_name=account_name, pbar=pbar)
 
 
 def _run_multi_folder_import(
@@ -815,7 +850,7 @@ def _run_multi_folder_import(
     dry_run: bool,
     ignore_latest_date_check: bool,
     period: str | None = None,
-) -> None:
+) -> int:
     all_rows: list[PendingRow] = []
     for folder in folders:
         all_rows.extend(_gather_folder_pending(client, folder, account_map, dry_run, ignore_latest_date_check, period))
@@ -827,8 +862,18 @@ def _run_multi_folder_import(
     total = len(pairs) + len(unmatched)
     with tqdm(total=total, desc="Import", unit="rad") as pbar:
         for i, j in pairs:
-            _post_transfer(client, _build_transfer_payload(all_rows[i], all_rows[j]), dry_run, pbar=pbar)
+            a, b = all_rows[i], all_rows[j]
+            neg, pos = (a, b) if parse_amount(a.amount) < 0 else (b, a)
+            _post_transfer(
+                client,
+                _build_transfer_payload(a, b),
+                dry_run,
+                pbar=pbar,
+                source_name=neg.account_name,
+                destination_name=pos.account_name,
+            )
         _post_unmatched_rows(client, unmatched, dry_run, pbar=pbar)
+    return total
 
 
 def _parse_cli_args(argv: list[str]) -> tuple[str, bool, bool, bool, bool, str | None]:
@@ -890,6 +935,7 @@ def main(
             return 1
 
     BLOCK_TRANSACTION_POSTS = dry_run
+    start_time = time.monotonic()
 
     log_file = setup_logging()
 
@@ -919,12 +965,19 @@ def main(
     logging.info(f"Loggar till: {log_file}")
 
     if len(folders) > 1:
-        _run_multi_folder_import(client, folders, account_map, dry_run, ignore_latest_date_check, period)
+        transaction_count = _run_multi_folder_import(
+            client, folders, account_map, dry_run, ignore_latest_date_check, period
+        )
     else:
+        transaction_count = 0
         for folder in folders:
-            process_folder(client, folder, account_map, dry_run, ignore_latest_date_check, period)
+            transaction_count += process_folder(client, folder, account_map, dry_run, ignore_latest_date_check, period)
 
+    elapsed_seconds = time.monotonic() - start_time
     logging.info("Klar!")
+    logging.info(f"Total tid: {timedelta(seconds=round(elapsed_seconds))}")
+    if transaction_count:
+        logging.info(f"{elapsed_seconds / transaction_count:.2f}s/transaktion")
     return 0
 
 
