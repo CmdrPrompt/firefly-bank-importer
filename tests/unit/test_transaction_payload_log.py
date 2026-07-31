@@ -94,15 +94,20 @@ class TestBuildTransactionPayloadHypothesis:
 class TestLogTxResult:
     def test_logs_ok_line(self, caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.INFO):
-            _log_tx_result("withdrawal", 100.0, "2025-01-01", "X")
+            _log_tx_result("withdrawal", 100.0, "2025-01-01", "X", "1")
         assert any("[OK]" in r.message for r in caplog.records)
 
     def test_logs_transaction_type(self, caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.INFO):
-            _log_tx_result("deposit", 50.0, "2025-01-01", "Salary")
+            _log_tx_result("deposit", 50.0, "2025-01-01", "Salary", "1")
         assert any("deposit" in r.message for r in caplog.records)
 
     def test_logs_amount(self, caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.INFO):
-            _log_tx_result("withdrawal", 42.50, "2025-01-01", "Test")
+            _log_tx_result("withdrawal", 42.50, "2025-01-01", "Test", "1")
         assert any("42.50" in r.message for r in caplog.records)
+
+    def test_logs_account_name(self, caplog: pytest.LogCaptureFixture) -> None:
+        with caplog.at_level(logging.INFO):
+            _log_tx_result("withdrawal", 42.50, "2025-01-01", "Test", "SEB Lönekonto Thomas")
+        assert any("[SEB Lönekonto Thomas]" in r.message for r in caplog.records)

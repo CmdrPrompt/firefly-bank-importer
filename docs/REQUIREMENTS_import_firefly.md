@@ -371,6 +371,29 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 4. Import otherwise proceeds as in UC-2/UC-31 (multiple accounts, with cross-account transfer detection scoped to the selected period's rows only).
 - Result: Only transactions from the selected month are imported, across every account in the same run, letting the user catch up month by month while transfer-matching still compares all accounts for that period.
 
+### UC-34: Show account names in transaction log lines
+
+- Actor: User
+- Preconditions: None beyond a normal import run (UC-1, UC-2, or UC-3 dry run).
+- Trigger: The script posts (or, under `--dry-run`, would post) a withdrawal/deposit or transfer transaction.
+- Main flow:
+1. For a withdrawal/deposit row, the script resolves the account's Firefly name from the discovered/cached account list and includes it in the log line instead of the numeric account ID.
+2. For a transfer row (UC-31), the script resolves both the source and destination accounts' names and includes them in the log line as `<source name> -> <destination name>` instead of numeric account IDs.
+3. If an account ID cannot be resolved to a name (e.g. a stale cache), the script falls back to logging the numeric ID so the line is still produced.
+- Result: Every transaction log line names the account(s) involved, so the user can tell at a glance which account each posted (or dry-run) transaction belongs to, without cross-referencing account IDs.
+
+### UC-35: Log total import duration
+
+- Actor: User
+- Preconditions: None; applies to every run of the script (UC-1, UC-2, UC-3 dry run, UC-33 period import).
+- Trigger: The script reaches the end of a run, whether all transactions posted successfully or some rows/folders failed.
+- Main flow:
+1. The script records a start time as early as possible in `main()`, before token/URL loading and account discovery.
+2. The script processes all folders as today (single-folder or multi-folder path).
+3. Once all folders have been processed, the script computes the elapsed wall-clock duration since the recorded start time, and counts the total number of transactions attempted during the run (every withdrawal/deposit row and every transfer pair posted or attempted, across all folders, whether successful or failed).
+4. The script logs the duration and, on the same or an immediately following log line, the average time per transaction (duration divided by the transaction count) as the last log lines of the run, after the existing "Klar!" message. If no transactions were attempted, the average-time line is omitted to avoid a division by zero.
+- Result: The user can see how long the run took and how much time each transaction took on average, directly from the log output (terminal and log file) without needing an external timer, and these are always the final lines so they are easy to find.
+
 ## 5. Functional Requirements
 
 ### FR-1 Token loading
@@ -600,6 +623,14 @@ The system shall depend on `tqdm>=4.66` and wrap the transaction-posting loops i
 
 The script shall accept a `--period YYYY-MM` CLI flag. The system shall validate the value against the pattern `\d{4}-\d{2}` with a month component in `01`-`12`; an invalid value shall cause the script to print a clear error message and exit before any account or API work happens. When `--period` is provided, CSV file resolution for each account folder (both the single-folder path, UC-1, and the multi-folder path, UC-2) shall be restricted to that folder's `<period>.csv` file only, instead of all `YYYY-MM.csv` files matched by `MONTHLY_FILE_RE`. A folder with no `<period>.csv` file shall be skipped with the same warning used today for a folder with no CSV files at all. When `--period` is omitted, behavior is unchanged from today (all monthly files in each folder are processed).
 
+### FR-69 Account-name transaction logging
+
+The system shall resolve each transaction's account ID(s) to the corresponding Firefly account name (via the discovered/cached account list) before logging the result of posting (or, under `--dry-run`, the result it would post). For a withdrawal/deposit row, the log line shall be `[OK] [<account name>] [<transaction type>] <amount> SEK | <date> | <description>` (or `[DRY RUN]` in place of `[OK]` under dry-run). For a transfer row (FR-66), the log line shall be `[OK] [transfer] <amount> SEK | <date> | <source account name> -> <destination account name> | <description>` (or `[DRY RUN]` in place of `[OK]` under dry-run). If an account ID cannot be resolved to a name, the system shall fall back to logging the numeric ID for that account so the line is still produced. Since the script logs through the shared logging configuration (System Context), this account-name format shall appear identically in both the terminal output and the `import_YYYYMMDD_HHMMSS.log` file — there is no separate formatting path for the log file.
+
+### FR-70 Import duration logging
+
+The system shall record a monotonic start time at the beginning of `main()`, before token/URL loading and account discovery, and shall compute the elapsed wall-clock duration once all folders have been processed (regardless of whether individual rows or folders encountered errors). The system shall also count the total number of transactions attempted during the run (every withdrawal/deposit row and every transfer pair posted or attempted, across all folders, whether successful or failed). The system shall log the duration in `H:MM:SS` format (e.g. `0:05:12`), followed by the average time per transaction in seconds (duration in seconds divided by the transaction count, e.g. `0.42s/transaktion`), as the final log lines of the run, after the existing "Klar!" message. If the transaction count is `0`, the average-time line shall be omitted. These log lines shall appear in both the terminal output and the `import_YYYYMMDD_HHMMSS.log` file, per the shared logging configuration (System Context).
+
 ## 6. Non-Functional Requirements
 
 ### NFR-1 Performance
@@ -714,6 +745,8 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | UC-31 | Detect and import transfers between accounts during multi-account import | Not implemented |
 | UC-32 | Show progress bar during transaction import | Not implemented |
 | UC-33 | Import a single period across all accounts | Not implemented |
+| UC-34 | Show account names in transaction log lines | Not implemented |
+| UC-35 | Log total import duration | Not implemented |
 
 ### Functional Requirements
 
@@ -780,6 +813,8 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | FR-66 | Cross-account transfer detection | Not implemented |
 | FR-67 | tqdm progress bar dependency | Not implemented |
 | FR-68 | Period-scoped import | Not implemented |
+| FR-69 | Account-name transaction logging | Not implemented |
+| FR-70 | Import duration logging | Not implemented |
 
 ### Non-Functional Requirements
 
