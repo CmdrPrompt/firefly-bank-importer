@@ -57,7 +57,7 @@ for ((total = start_total; total <= end_total; total++)); do
     period=$(printf "%04d-%02d" "$year" "$month")
 
     echo "=== Importerar period $period ==="
-    uv run firefly-import "$folder" --period "$period" "${extra_args[@]}"
+    uv run firefly-import "$folder" --period "$period" "${extra_args[@]+"${extra_args[@]}"}"
 done
 
 echo "Klart. Importerade perioder $start till $end."
