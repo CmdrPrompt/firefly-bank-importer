@@ -1,7 +1,7 @@
 # TASK-060 Repoint ci.yml's reusable workflow reference to python-butler
 
 ## Status
-in-progress
+done
 
 ## Requirements
 **Binding:** Requirement 1 (REQUIREMENTS_CI.md)
