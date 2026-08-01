@@ -55,6 +55,21 @@ run pip-audit --progress-spinner=off` finds `pip-audit` already installed
 and runs the audit instead of failing with `Failed to spawn: pip-audit
 ... No such file or directory`.
 
+## Requirement 3: Known-vulnerable transitive dependencies are patched
+
+**Description:** With `pip-audit` runnable (Requirement 2), it reports 14
+known vulnerabilities across 5 packages — `click` (8.3.1 → 8.3.3), `idna`
+(3.11 → 3.15), `pytest` (9.0.2 → 9.0.3), `starlette` (1.0.0 → 1.3.1), and
+`urllib3` (2.6.3 → 2.7.0). None of these are version-pinned in
+`pyproject.toml` (they're transitive, or direct-but-unconstrained like
+`"pytest"`), so `uv.lock` is upgraded to resolve each to at least its fix
+version, with no `pyproject.toml` changes needed.
+
+**Use case:** The CI Audit step (`uv run pip-audit --progress-spinner=off`)
+runs against the locked dependency set and reports zero known
+vulnerabilities, so the `ci` job's Audit step — and therefore the whole
+`ci` job — passes.
+
 ## Acceptance criteria
 
 - [ ] `.github/workflows/ci.yml`'s `uses:` line points at
@@ -64,3 +79,6 @@ and runs the audit instead of failing with `Failed to spawn: pip-audit
 - [ ] `pyproject.toml`'s `dev` extra includes `pip-audit`, and `uv run
       pip-audit --progress-spinner=off` runs without a "Failed to spawn"
       error.
+- [ ] `uv run pip-audit --progress-spinner=off` reports zero known
+      vulnerabilities, and `uv.lock` pins `click>=8.3.3`, `idna>=3.15`,
+      `pytest>=9.0.3`, `starlette>=1.3.1`, `urllib3>=2.7.0`.

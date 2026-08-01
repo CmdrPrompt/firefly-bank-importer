@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Upgraded `click`, `idna`, `pytest`, `starlette`, and `urllib3` in `uv.lock` past 14 known CVEs `pip-audit` flagged, so CI's Audit step now passes cleanly with zero reported vulnerabilities (TASK-062).
 - Added `pip-audit` to the `dev` extra in `pyproject.toml`, fixing CI's Audit step, which previously failed with `Failed to spawn: pip-audit ... No such file or directory` because the tool was never installed by `uv sync --extra dev` (TASK-061).
 - CI's `ci.yml` now calls the reusable workflow at `CmdrPrompt/python-butler` instead of the renamed `python-commons`, fixing an intermittent "Invalid workflow file ... workflow was not found" failure caused by GitHub Actions not reliably resolving `uses:` references across a repo rename (TASK-060).
 - The duplicate-import check no longer treats a cross-account transfer transaction as the account's latest transaction. Previously, once a transfer (UC-31, TASK-054/056) had been posted with a date later than other not-yet-imported withdrawal/deposit rows on the same account, the duplicate-import check would incorrectly skip all of those earlier rows on the next run. The latest-date lookup now excludes transfers, comparing only against the account's latest withdrawal/deposit transaction (TASK-057).
