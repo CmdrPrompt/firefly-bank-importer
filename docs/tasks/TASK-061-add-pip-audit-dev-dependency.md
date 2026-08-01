@@ -1,7 +1,7 @@
 # TASK-061 Add pip-audit as a dev dependency so the CI Audit step can run
 
 ## Status
-in-progress
+done
 
 ## Requirements
 **Binding:** Requirement 2 (REQUIREMENTS_CI.md)
@@ -33,7 +33,7 @@ installs it. Add `pip-audit` to that list.
 
 ## Acceptance criteria (Gherkin)
 
-- [ ] Scenario: pip-audit is installed by the dev extra
+- [x] Scenario: pip-audit is installed by the dev extra
       Given `pyproject.toml`'s `[project.optional-dependencies] dev` list
       When `uv sync --extra dev` runs
       Then `pip-audit` is installed and `uv run pip-audit --progress-spinner=off` runs without a "Failed to spawn" error

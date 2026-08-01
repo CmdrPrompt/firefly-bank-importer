@@ -1,7 +1,7 @@
 # TASK-062 Patch known-vulnerable transitive dependencies flagged by pip-audit
 
 ## Status
-in-progress
+done
 
 ## Requirements
 **Binding:** Requirement 3 (REQUIREMENTS_CI.md)
@@ -33,12 +33,12 @@ pytest --upgrade-package starlette --upgrade-package urllib3` resolves
 
 ## Acceptance criteria (Gherkin)
 
-- [ ] Scenario: pip-audit reports zero vulnerabilities
+- [x] Scenario: pip-audit reports zero vulnerabilities
       Given `uv.lock` is upgraded per the Description
       When `uv run pip-audit --progress-spinner=off` runs
       Then it exits 0 and reports no known vulnerabilities
 
-- [ ] Scenario: Lint and test still pass after the upgrade
+- [x] Scenario: Lint and test still pass after the upgrade
       Given the upgraded `uv.lock`
       When `make lint` and `make test` run
       Then both pass, confirming the version bumps don't break the app
