@@ -1,7 +1,7 @@
 # TASK-025 Tests for web UI coverage gap
 
 ## Status
-done
+cancelled
 
 ## Description
 Add characterization tests for currently untested branches in `src/firefly_bank_importer/web_ui.py` so that `make test` passes the repository coverage threshold again.
@@ -25,3 +25,5 @@ Add characterization tests for currently untested branches in `src/firefly_bank_
 **Branch:** `git checkout -b task/025-tests-web-ui-coverage-gap`
 **Stage:** `git add docs/tasks/TASK-025-tests-web-ui-coverage-gap.md tests/unit/test_web_ui_file_upload.py tests/unit/test_web_ui_live_import_progress.py`
 **Commit:** `git commit -m "Add web UI coverage characterization tests"`
+
+> **Superseded (2026-08-01):** The web UI (`web_ui.py` and its tests) has been removed from this repository. The web frontend is being rebuilt as a standalone application in a separate repository, consuming this project's service layer as a library. This task's original status was `done`; its scope no longer applies here.

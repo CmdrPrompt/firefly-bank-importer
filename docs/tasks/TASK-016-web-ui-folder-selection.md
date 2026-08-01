@@ -1,7 +1,7 @@
 # TASK-016 Web UI folder selection
 
 ## Status
-done
+cancelled
 
 ## Description
 Implement UC-16 in the web UI: list import folders and show file previews so users can choose folders without CLI paths. Include a convenient Make target for starting the web UI during development.
@@ -24,3 +24,5 @@ Implement UC-16 in the web UI: list import folders and show file previews so use
 **Branch:** `git checkout -b task/016-web-ui-folder-selection`
 **Stage:** `git add Makefile pyproject.toml src/firefly_bank_importer/web_ui.py tests/unit/test_web_ui_folder_selection.py docs/tasks/TASK-016-web-ui-folder-selection.md`
 **Commit:** `git commit -m "Implement web UI folder selection"`
+
+> **Superseded (2026-08-01):** The web UI (`web_ui.py` and its tests) has been removed from this repository. The web frontend is being rebuilt as a standalone application in a separate repository, consuming this project's service layer as a library. This task's original status was `done`; its scope no longer applies here.

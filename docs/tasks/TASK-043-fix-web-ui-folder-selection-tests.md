@@ -1,7 +1,7 @@
 # TASK-043 Fix web UI folder selection tests
 
 ## Status
-in-progress
+cancelled
 
 ## Description
 Two test quality issues found in the web UI folder selection tests:
@@ -36,3 +36,5 @@ rendered by the production code.
 **Branch:** `git checkout task/043-fix-web-ui-folder-selection-tests`
 **Stage:** `git add tests/unit/test_web_ui_folder_selection.py tests/unit/test_web_ui_account_matching.py CHANGELOG.md docs/tasks/TASK-043-fix-web-ui-folder-selection-tests.md`
 **Commit:** `git commit -m "Fix web UI folder selection tests to cover happy path and tighten assertions"`
+
+> **Superseded (2026-08-01):** The web UI (`web_ui.py` and its tests) has been removed from this repository. The web frontend is being rebuilt as a standalone application in a separate repository, consuming this project's service layer as a library. This task's original status was `in-progress`; its scope no longer applies here.

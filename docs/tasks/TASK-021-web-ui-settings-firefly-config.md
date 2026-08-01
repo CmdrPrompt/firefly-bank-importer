@@ -1,7 +1,7 @@
 # TASK-021 Web UI Firefly settings
 
 ## Status
-done
+cancelled
 
 ## Description
 Implement UC-15 in the web UI: configure Firefly URL and token from settings page with validation and persistence.
@@ -22,3 +22,5 @@ Implement UC-15 in the web UI: configure Firefly URL and token from settings pag
 **Branch:** `git checkout -b task/021-web-ui-settings-firefly-config`
 **Stage:** `git add src/firefly_bank_importer/web_ui.py tests/unit/test_web_ui_settings.py docs/REQUIREMENTS_import_firefly.md docs/tasks/TASK-021-web-ui-settings-firefly-config.md`
 **Commit:** `git commit -m "Implement web UI settings endpoint for Firefly URL and token"`
+
+> **Superseded (2026-08-01):** The web UI (`web_ui.py` and its tests) has been removed from this repository. The web frontend is being rebuilt as a standalone application in a separate repository, consuming this project's service layer as a library. This task's original status was `done`; its scope no longer applies here.

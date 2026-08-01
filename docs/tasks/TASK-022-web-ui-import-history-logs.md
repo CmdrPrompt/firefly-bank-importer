@@ -1,7 +1,7 @@
 # TASK-022 Web UI import history and logs
 
 ## Status
-done
+cancelled
 
 ## Description
 Implement UC-20 in the web UI: show prior import runs and detailed logs for audit and troubleshooting.
@@ -27,3 +27,5 @@ Implement UC-20 in the web UI: show prior import runs and detailed logs for audi
 **Branch:** `git checkout -b task/022-web-ui-import-history-logs`
 **Stage:** `git add src/firefly_bank_importer/web_ui.py tests/unit/test_web_ui_import_history.py docs/REQUIREMENTS_import_firefly.md CHANGELOG.md docs/tasks/TASK-022-web-ui-import-history-logs.md`
 **Commit:** `git commit -m "Implement web UI import history and logs"`
+
+> **Superseded (2026-08-01):** The web UI (`web_ui.py` and its tests) has been removed from this repository. The web frontend is being rebuilt as a standalone application in a separate repository, consuming this project's service layer as a library. This task's original status was `done`; its scope no longer applies here.

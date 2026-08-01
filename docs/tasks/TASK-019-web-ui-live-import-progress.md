@@ -1,7 +1,7 @@
 # TASK-019 Web UI live import progress
 
 ## Status
-done
+cancelled
 
 ## Description
 Implement UC-19 in the web UI: run live import and stream progress/log output during execution.
@@ -21,3 +21,5 @@ Implement UC-19 in the web UI: run live import and stream progress/log output du
 **Branch:** `git checkout -b task/019-web-ui-live-import-progress`
 **Stage:** `git add src/firefly_bank_importer/web_ui.py tests/unit/test_web_ui_live_import_progress.py docs/tasks/TASK-019-web-ui-live-import-progress.md`
 **Commit:** `git commit -m "Implement web UI live import progress"`
+
+> **Superseded (2026-08-01):** The web UI (`web_ui.py` and its tests) has been removed from this repository. The web frontend is being rebuilt as a standalone application in a separate repository, consuming this project's service layer as a library. This task's original status was `done`; its scope no longer applies here.

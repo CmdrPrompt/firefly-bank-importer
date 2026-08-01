@@ -3,10 +3,10 @@
 ## 1. Purpose and Scope
 This document defines the requirements and use cases for the current implementation of import_firefly.py (version 1.0.0) and the planned changes tracked under [Unreleased].
 
-The script is intended to import bank transactions from CSV files (SEB and ICA formats) into Firefly III through its API.
+The script is intended to import bank transactions from CSV files (SEB, ICA, and Nordea formats) into Firefly III through its API, both as a standalone CLI tool and as an importable service layer for external applications (e.g. a separate web frontend project) — this repository does not run its own web server.
 
 ## 2. Goals
-- Import transactions from one or more account folders.
+- Import transactions from one or more account folders. Multi-account import (UC-2) is the primary real-world usage pattern: only importing multiple accounts together lets cross-account transfer detection (UC-31) match transfers correctly. Single-folder import (UC-1) remains a supported but secondary capability.
 - Reduce duplicate imports through latest-date validation against Firefly.
 - Support dry runs without creating transactions.
 - Handle unsplit export files by automatically splitting them by month.
@@ -25,6 +25,9 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 - Bank format packages: local Python packages that describe how a bank export file is recognized and how its columns map to normalized transaction fields.
 - Target environment: Firefly III API.
 - Output: created transactions in Firefly III and a log file named import_YYYYMMDD_HHMMSS.log.
+- Core import logic (folder/account resolution, CSV parsing, opening-balance detection, transfer detection, transaction posting) lives in a service layer independent of any interface. It has no dependency on stdout/print, argparse, process exit codes, or terminal-only libraries (e.g. tqdm); it communicates progress and results only through return values and structured events.
+- The CLI (`import_firefly.py` entry point) is a thin adapter over the service layer: it parses argv, calls the service layer, and renders CLI-specific output (stdout, a tqdm progress bar, exit codes) from the structured results/events it receives.
+- This repository does not run its own web server or HTTP UI. The service layer is packaged so it can be imported by an external application — a separate frontend project (its own repository) that also serves other Firefly-related tools (e.g. a bills-analysis project) — which is responsible for any HTTP API, web UI, background-job execution, and progress streaming built on top of it.
 
 ## 4. Use Cases
 
@@ -169,42 +172,9 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 4. The core importer discovers and uses the package during normal processing.
 - Result: New bank formats can be added by extension rather than by editing core CSV detection logic.
 
-### UC-18: Preview dry-run import in web UI
-- Actor: User
-- Preconditions: One or more import folders are selected and mapped to Firefly accounts in the web UI.
-- Trigger: The user requests a dry-run preview before live import.
-- Main flow:
-1. The web UI validates that each selected folder has a resolved destination account.
-2. The system parses files in selected folders using the existing format resolution and duplicate-date rules.
-3. The system computes a preview summary per folder and total, including candidate transactions, skipped duplicates, date range, and parsing warnings/errors.
-4. The web UI shows the summary and blocks live import when unresolved errors exist.
-- Result: The user can verify what would be imported before executing live import.
-
-### UC-19: Run live import with progress in web UI
-- Actor: User
-- Preconditions: Dry-run preview is completed and contains no blocking errors.
-- Trigger: The user starts live import from the web UI.
-- Main flow:
-1. The web UI starts an asynchronous live-import job for selected folders and mappings.
-2. The backend processes files and transactions while emitting incremental progress updates.
-3. The web UI receives and renders progress updates in near real time.
-4. When the job finishes, the web UI shows a completion summary with imported, skipped, and failed counts.
-- Result: The user can monitor live import execution and outcome without terminal access.
-
-### UC-20: Show import history and logs in web UI
-- Actor: User
-- Trigger: The user opens the web UI to review prior imports.
-- Main flow:
-1. The web UI requests a list of prior import runs.
-2. The backend returns entries with status and timestamp.
-3. The user selects one run to inspect details.
-4. The backend returns detailed log lines for that run.
-5. The web UI renders the detailed logs for troubleshooting.
-- Result: The user can audit and troubleshoot previous imports without manual file access.
-
 ### UC-23: Clear old import logs
 - Actor: User
-- Trigger: The user chooses to clear logs from CLI or web UI.
+- Trigger: The user chooses to clear logs from the CLI.
 - Main flow:
 1. The system lists existing import log files.
 2. The user chooses clear scope (all logs or logs older than N days).
@@ -233,7 +203,7 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 ### UC-26: Import a Nordea bank CSV export
 - Actor: User
 - Preconditions: A CSV export from Nordea is placed in an import folder.
-- Trigger: The user runs the import script or triggers import from the web UI.
+- Trigger: The user runs the import script.
 - Main flow:
 1. The script opens the CSV file and reads the header row.
 2. The script identifies the Nordea format by matching the header fields `Bokföringsdag`, `Belopp`, and `Rubrik`.
@@ -242,43 +212,6 @@ The script is intended to import bank transactions from CSV files (SEB and ICA f
 5. The script normalises amounts to US format (decimal point, no thousands separator) for Firefly API compatibility.
 6. The script imports the transactions using the same flow as other supported formats.
 - Result: Nordea transactions are imported into Firefly III on the same basis as SEB and ICA exports.
-
-### UC-15: Configure Firefly URL and token in web UI settings
-- Actor: User
-- Preconditions: The web UI is running and the settings page is accessible.
-- Trigger: The user opens the settings page and submits Firefly URL and API token.
-- Main flow:
-1. The web UI shows the current configured Firefly URL and indicates whether a token is already stored.
-2. The user enters or updates the Firefly URL and API token.
-3. The backend validates the URL by calling Firefly /api/v1/about.
-4. If validation succeeds, the backend persists URL to config.json and token to secrets.json.
-5. The web UI returns a success response.
-- Alternative flow:
-1. If URL validation fails, no values are persisted.
-2. The web UI returns a clear validation error message.
-- Result: Firefly connection settings are managed from the web UI with validation and persistence.
-
-### UC-21: Trigger account refresh from web UI
-- Actor: User
-- Trigger: The user clicks "Refresh accounts" in the web UI.
-- Main flow:
-1. The web UI sends a POST request to `/refresh-accounts`.
-2. The backend calls Firefly to fetch all asset accounts and rebuilds the local cache.
-3. The backend creates any new import folders for newly discovered accounts.
-4. The backend returns a result page showing: total accounts found, list of all account names, new folders created, any errors.
-5. The user sees which accounts are available and how many folders were created.
-- Result: Account cache and import folders are updated; the user sees the full list of discovered accounts.
-
-### UC-22: Upload CSV files in web UI
-- Actor: User
-- Preconditions: The web UI is running and at least one import folder exists.
-- Trigger: The user uploads one or more CSV files via the web UI.
-- Main flow:
-1. The user selects target import folder and one or more CSV files.
-2. The system validates file type and supported bank format via CSV headers.
-3. The system stores valid files in the selected import folder.
-4. The system reports per-file result (saved/rejected) with reason.
-- Result: Valid CSV files are placed in import folders without manual filesystem operations.
 
 ### UC-27: Bootstrap repository governance from shared .commons
 - Actor: Developer
@@ -519,45 +452,6 @@ The system shall provide a log-cleanup operation that supports:
 - deleting import log files older than a user-provided retention period in days,
 with explicit confirmation before destructive action.
 
-### FR-38 Web UI dry-run preview API
-The system shall provide a web API endpoint that returns a dry-run preview summary for selected folders and account mappings without creating transactions in Firefly.
-
-### FR-39 Web UI preview content
-The dry-run preview response and UI shall include, at minimum, per-folder and total counts for candidate transactions, duplicate-skipped rows, date range, and parsing/validation warnings.
-
-### FR-40 Live-import guard from preview
-The web UI shall prevent continuing to live import when dry-run preview reports unresolved mapping errors or fatal parsing/validation errors.
-
-### FR-41 Web UI live import job start
-The system shall provide an API endpoint that starts a live-import job asynchronously for selected folders and resolved account mappings.
-
-### FR-42 Web UI live progress stream
-The system shall provide progress updates for running live-import jobs, including job state, current folder/file context, and cumulative imported/skipped/failed counts.
-
-### FR-43 Web UI live import completion summary
-When a live-import job completes, the system shall expose a completion summary containing imported, skipped, and failed totals and any terminal errors.
-
-### FR-44 Web UI upload endpoint
-The system shall provide a web API endpoint that accepts CSV file uploads and a target import folder.
-
-### FR-45 Web UI upload validation
-The upload flow shall validate that uploaded files are CSV and that headers match a supported bank format before saving files.
-
-### FR-46 Web UI upload result feedback
-The upload flow shall return user-visible per-file feedback containing filename, save status, and rejection reason when validation fails.
-
-### FR-47 Web UI settings read
-The web UI settings endpoint (GET /settings) shall return the current Firefly URL from config.json and indicate whether an API token is stored in secrets.json, without returning the token value.
-
-### FR-48 Web UI settings save
-The web UI settings save endpoint (POST /api/settings) shall accept Firefly URL and API token, validate the URL against Firefly /api/v1/about, and persist URL to config.json plus token to secrets.json only on successful validation.
-
-### FR-49 Web UI settings validation failure
-If URL validation fails in the settings save flow, the system shall not modify config.json or secrets.json and shall return an actionable error message.
-
-### FR-50 Web UI settings update
-The settings save flow shall support both first-time setup and updates to existing values; existing URL and token shall be replaced on successful validation.
-
 ### FR-51 Cognitive complexity lint gate
 All functions under src/ shall satisfy the repository's Complexipy cognitive-complexity threshold enforced by make lint.
 
@@ -569,24 +463,6 @@ The Makefile shall provide a commit shortcut target that commits with the messag
 
 ### FR-54 Current-task PR shortcut target
 The Makefile shall provide a PR shortcut target that opens a pull request using title/body from the task file inferred from the current task branch, without requiring `f=<TASK-ID>`.
-
-### FR-55 Web UI import history list API
-The system shall provide an API endpoint that returns prior import runs with at least run identifier, status, timestamp, and source log filename.
-
-### FR-56 Web UI import history page
-The system shall provide a web UI page that lists prior import runs with status and timestamp and links each run to a details view.
-
-### FR-57 Web UI per-run log details
-The system shall provide an API endpoint and corresponding web UI page to show detailed log lines for a selected import run.
-
-### FR-58 Web UI refresh-accounts endpoint
-The system shall provide a POST `/api/refresh-accounts` endpoint that triggers live account discovery from Firefly, updates the local cache, creates missing import folders, and returns a JSON summary with total accounts found, list of discovered account names, and new folders created.
-
-### FR-59 Web UI refresh-accounts action
-The web UI index page shall expose a "Refresh accounts" button that POSTs to `/refresh-accounts`.
-
-### FR-60 Web UI refresh-accounts result page
-The system shall provide a POST `/refresh-accounts` HTML endpoint that performs account refresh and renders a result page showing total accounts found, each discovered account name, new folders created count, and a link back to the index.
 
 ### FR-61 Shared instruction templates
 The repository governance files `CLAUDE.md` and `.github/copilot-instructions.md` shall be generated from shared templates managed in `.commons`, with project context as explicit input values.
@@ -630,6 +506,18 @@ The system shall resolve each transaction's account ID(s) to the corresponding F
 ### FR-70 Import duration logging
 
 The system shall record a monotonic start time at the beginning of `main()`, before token/URL loading and account discovery, and shall compute the elapsed wall-clock duration once all folders have been processed (regardless of whether individual rows or folders encountered errors). The system shall also count the total number of transactions attempted during the run (every withdrawal/deposit row and every transfer pair posted or attempted, across all folders, whether successful or failed). The system shall log the duration in `H:MM:SS` format (e.g. `0:05:12`), followed by the average time per transaction in seconds (duration in seconds divided by the transaction count, e.g. `0.42s/transaktion`), as the final log lines of the run, after the existing "Klar!" message. If the transaction count is `0`, the average-time line shall be omitted. These log lines shall appear in both the terminal output and the `import_YYYYMMDD_HHMMSS.log` file, per the shared logging configuration (System Context).
+
+### FR-71 Shared service layer for import logic
+
+Folder/account resolution, CSV parsing, duplicate-date filtering, opening-balance detection (UC-30), transfer detection (UC-31), period scoping (UC-33), account-name resolution (UC-34), and transaction posting shall live in a service layer with no dependency on stdout/print, argparse, process exit codes, or terminal-only libraries (e.g. `tqdm`). The service layer shall communicate progress and results only through return values and structured events (e.g. per-row/per-folder result objects), so any adapter (CLI or web) can consume them without depending on the other adapter's presentation concerns.
+
+### FR-72 CLI is a thin adapter over the service layer
+
+The CLI entry point (`main`, `_parse_cli_args`, and related argv/output handling in `import_firefly.py`) shall contain only CLI-specific concerns: argv parsing, rendering a `tqdm` progress bar, writing to stdout/the log file, and process exit codes. It shall delegate all import behavior to the shared service layer (FR-71) and shall not contain business logic (parsing rules, duplicate-date rules, opening-balance rules, transfer-matching rules) that an external consumer would otherwise need to duplicate.
+
+### FR-73 Service layer packaged for external consumption
+
+The service layer (FR-71) shall be importable as a Python library by an external application (e.g. a separate frontend project serving both this project and other Firefly-related tools) via a stable module path and function/class signatures, without this repository running its own HTTP server or web process. This repository's responsibility ends at exposing that importable interface; any HTTP API, web UI, background-job runner, or progress-streaming mechanism built on top of it is out of scope here and belongs to the consuming project.
 
 ## 6. Non-Functional Requirements
 
@@ -731,22 +619,16 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | UC-12 | Configure Firefly connection on first run | Not implemented |
 | UC-13 | Resolve a bank export format through a format package | Implemented |
 | UC-14 | Add a new bank export format without changing the core importer | Implemented |
-| UC-18 | Preview dry-run import in web UI | Not implemented |
-| UC-19 | Run live import with progress in web UI | Not implemented |
-| UC-20 | Show import history and logs in web UI | Implemented |
-| UC-21 | Trigger account refresh from web UI | Implemented |
-| UC-22 | Upload CSV files in web UI | Not implemented |
 | UC-23 | Clear old import logs | Not implemented |
 | UC-24 | Reduce cognitive complexity in flagged functions | Implemented |
 | UC-25 | Use current-task Makefile shortcuts | Implemented |
-| UC-24 | Reduce cognitive complexity in flagged functions | Implemented |
-| UC-29 | Clear transactions for reimport | Not implemented |
-| UC-30 | Automatically set opening balance from bank export on first import | Not implemented |
-| UC-31 | Detect and import transfers between accounts during multi-account import | Not implemented |
-| UC-32 | Show progress bar during transaction import | Not implemented |
-| UC-33 | Import a single period across all accounts | Not implemented |
-| UC-34 | Show account names in transaction log lines | Not implemented |
-| UC-35 | Log total import duration | Not implemented |
+| UC-29 | Clear transactions for reimport | Implemented |
+| UC-30 | Automatically set opening balance from bank export on first import | Implemented |
+| UC-31 | Detect and import transfers between accounts during multi-account import | Implemented |
+| UC-32 | Show progress bar during transaction import | Implemented |
+| UC-33 | Import a single period across all accounts | Implemented |
+| UC-34 | Show account names in transaction log lines | Implemented |
+| UC-35 | Log total import duration | Implemented |
 
 ### Functional Requirements
 
@@ -789,32 +671,20 @@ This chapter tracks which requirements and use cases are implemented in the curr
 | FR-35 | Shared importer contract for bank formats | Implemented |
 | FR-36 | Unsupported format handling in package architecture | Implemented |
 | FR-37 | Log cleanup command | Not implemented |
-| FR-38 | Web UI dry-run preview API | Not implemented |
-| FR-39 | Web UI preview content | Not implemented |
-| FR-40 | Live-import guard from preview | Not implemented |
-| FR-41 | Web UI live import job start | Not implemented |
-| FR-42 | Web UI live progress stream | Not implemented |
-| FR-43 | Web UI live import completion summary | Not implemented |
-| FR-44 | Web UI upload endpoint | Not implemented |
-| FR-45 | Web UI upload validation | Not implemented |
-| FR-46 | Web UI upload result feedback | Not implemented |
 | FR-51 | Cognitive complexity lint gate | Implemented |
 | FR-52 | Current-task stage shortcut target | Implemented |
 | FR-53 | Current-task commit shortcut target | Implemented |
 | FR-54 | Current-task PR shortcut target | Implemented |
-| FR-55 | Web UI import history list API | Implemented |
-| FR-56 | Web UI import history page | Implemented |
-| FR-57 | Web UI per-run log details | Implemented |
-| FR-58 | Web UI refresh-accounts endpoint | Implemented |
-| FR-59 | Web UI refresh-accounts action | Implemented |
-| FR-60 | Web UI refresh-accounts result page | Implemented |
-| FR-64 | Clear-transactions command | Not implemented |
-| FR-65 | Automatic opening balance detection | Not implemented |
-| FR-66 | Cross-account transfer detection | Not implemented |
-| FR-67 | tqdm progress bar dependency | Not implemented |
-| FR-68 | Period-scoped import | Not implemented |
-| FR-69 | Account-name transaction logging | Not implemented |
-| FR-70 | Import duration logging | Not implemented |
+| FR-64 | Clear-transactions command | Implemented |
+| FR-65 | Automatic opening balance detection | Implemented |
+| FR-66 | Cross-account transfer detection | Implemented |
+| FR-67 | tqdm progress bar dependency | Implemented |
+| FR-68 | Period-scoped import | Implemented |
+| FR-69 | Account-name transaction logging | Implemented |
+| FR-70 | Import duration logging | Implemented |
+| FR-71 | Shared service layer for import logic | Not implemented (rebuild pending) |
+| FR-72 | CLI is a thin adapter over the service layer | Not implemented (rebuild pending) |
+| FR-73 | Service layer packaged for external consumption | Not implemented (rebuild pending) |
 
 ### Non-Functional Requirements
 

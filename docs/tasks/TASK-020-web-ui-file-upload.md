@@ -1,7 +1,7 @@
 # TASK-020 Web UI file upload
 
 ## Status
-done
+cancelled
 
 ## Description
 Implement UC-22 in the web UI: upload CSV files through the interface and place them in import folders.
@@ -22,3 +22,5 @@ Implement UC-22 in the web UI: upload CSV files through the interface and place 
 **Branch:** `git checkout -b task/020-web-ui-file-upload`
 **Stage:** `git add src/firefly_bank_importer/web_ui.py tests/unit/test_web_ui_file_upload.py pyproject.toml docs/tasks/TASK-020-web-ui-file-upload.md`
 **Commit:** `git commit -m "Implement web UI file upload"`
+
+> **Superseded (2026-08-01):** The web UI (`web_ui.py` and its tests) has been removed from this repository. The web frontend is being rebuilt as a standalone application in a separate repository, consuming this project's service layer as a library. This task's original status was `done`; its scope no longer applies here.
