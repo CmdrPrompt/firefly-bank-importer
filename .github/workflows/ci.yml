@@ -7,7 +7,7 @@ on:
 
 jobs:
   ci:
-    uses: CmdrPrompt/python-commons/.github/workflows/python-ci.yml@main
+    uses: CmdrPrompt/python-butler/.github/workflows/python-ci.yml@main
     with:
       python-version: "3.11"
       install-command: "uv sync --extra dev"
