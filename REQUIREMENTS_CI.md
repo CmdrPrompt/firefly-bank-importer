@@ -40,9 +40,27 @@ unchanged.
 checkout → install → lint → test → audit, and no longer fails with a
 "workflow file issue" caused by stale-name resolution.
 
+## Requirement 2: `pip-audit` is installed for the Audit step
+
+**Description:** `ci.yml`'s `audit-command` (`uv run pip-audit
+--progress-spinner=off`) requires `pip-audit` to be resolvable by `uv run`,
+which only sees packages declared in this project's dependencies.
+`pyproject.toml`'s `[project.optional-dependencies] dev` list adds
+`pip-audit` alongside `ruff`, `mypy`, `bandit`, `pymarkdownlnt`, and
+`complexipy`, so `uv sync --extra dev` (the `install-command`) installs it
+before the Audit step runs.
+
+**Use case:** A pull request runs the reusable workflow's Audit step. `uv
+run pip-audit --progress-spinner=off` finds `pip-audit` already installed
+and runs the audit instead of failing with `Failed to spawn: pip-audit
+... No such file or directory`.
+
 ## Acceptance criteria
 
 - [ ] `.github/workflows/ci.yml`'s `uses:` line points at
       `CmdrPrompt/python-butler/.github/workflows/python-ci.yml@main`.
 - [ ] The `with:` inputs are unchanged.
 - [ ] A PR against this repo runs the `ci` job successfully end-to-end.
+- [ ] `pyproject.toml`'s `dev` extra includes `pip-audit`, and `uv run
+      pip-audit --progress-spinner=off` runs without a "Failed to spawn"
+      error.

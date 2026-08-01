@@ -33,6 +33,7 @@ dev = [
     "uvicorn",
     "httpx",
     "types-tqdm",
+    "pip-audit",
 ]
 
 [project.scripts]
