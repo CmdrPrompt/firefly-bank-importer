@@ -17,9 +17,9 @@ from firefly_python_api import FireflyClient, FireflyConnectionError
 import firefly_bank_importer.import_firefly as module
 from firefly_bank_importer.import_firefly import (
     PendingRow,
-    _post_transfer,
     _post_unmatched_rows,
     main,
+    post_transfer,
     process_csv,
 )
 
@@ -140,7 +140,7 @@ class TestPostTransferReturnsResult:
             "destination_id": "2",
             "currency_code": "SEK",
         }
-        result = _post_transfer(client, payload, dry_run=False)
+        result = post_transfer(client, payload, dry_run=False)
         assert result.status == TransactionStatus.OK
 
     def test_returns_error_result_when_post_raises(self) -> None:
@@ -157,7 +157,7 @@ class TestPostTransferReturnsResult:
             "destination_id": "2",
             "currency_code": "SEK",
         }
-        result = _post_transfer(client, payload, dry_run=False)
+        result = post_transfer(client, payload, dry_run=False)
         assert result.status == TransactionStatus.ERROR
 
     def test_dry_run_does_not_call_client(self) -> None:
@@ -171,7 +171,7 @@ class TestPostTransferReturnsResult:
             "destination_id": "2",
             "currency_code": "SEK",
         }
-        _post_transfer(client, payload, dry_run=True)
+        post_transfer(client, payload, dry_run=True)
         client.create_transaction.assert_not_called()
 
 

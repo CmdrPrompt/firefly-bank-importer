@@ -29,6 +29,7 @@ from firefly_python_api import FireflyClient
 from pytest_bdd import given, scenarios, then, when
 
 import firefly_bank_importer.import_firefly as module
+import firefly_bank_importer.service as service_module
 from firefly_bank_importer.service import (
     OpeningBalanceResult,
     PendingRow,
@@ -135,7 +136,7 @@ def then_no_direct_logging(context: dict[str, Any]) -> None:
 
 @given("posting and orchestration functions previously accepted a tqdm progress bar as a parameter")
 def given_previous_pbar_contract(context: dict[str, Any]) -> None:
-    context["target_funcs"] = ["_run_threaded_import", "_post_transfer", "_post_unmatched_rows"]
+    context["target_funcs"] = ["_run_threaded_import", "post_transfer", "_post_unmatched_rows"]
 
 
 @when("refactored per FR-71")
@@ -160,13 +161,13 @@ def when_refactored_functions_exercised(
     write_seb_csv(folder_a / "2025-01.csv", [["2025-01-05", "2025-01-05", "V1", "Overforing", "-100,00", "900,00"]])
     write_seb_csv(folder_b / "2025-01.csv", [["2025-01-05", "2025-01-05", "V1", "Overforing", "100,00", "1100,00"]])
     account_map = {"Lonekonto": 1, "Sparkonto": 2}
+    client.get_transactions_by_type.return_value = []
 
-    with patch.object(module, "get_latest_transaction_date", return_value=None):
-        context["multi_folder_results"] = list(
-            module._run_multi_folder_import(
-                client, [folder_a, folder_b], account_map, dry_run=True, ignore_latest_date_check=False
-            )
+    context["multi_folder_results"] = list(
+        module.run_multi_folder_import(
+            client, [folder_a, folder_b], account_map, dry_run=True, ignore_latest_date_check=False
         )
+    )
 
 
 @then("they no longer accept a pbar parameter")
@@ -322,7 +323,7 @@ def given_opening_balance_zero(context: dict[str, Any], tmp_path: Path) -> None:
 
 @when("the service layer sets the opening balance via set_opening_balance per FR-71")
 def when_opening_balance_set(context: dict[str, Any]) -> None:
-    context["opening_balance_result"] = module._apply_auto_opening_balance(
+    context["opening_balance_result"] = module.apply_auto_opening_balance(
         context["client"], 42, [context["csv_path"]], dry_run=False
     )
 
@@ -373,7 +374,7 @@ def given_transfer_detection(context: dict[str, Any]) -> None:
 
 @when("a transfer is matched between accounts")
 def when_transfer_matched(context: dict[str, Any]) -> None:
-    context["transfer_result"] = module._post_transfer(
+    context["transfer_result"] = module.post_transfer(
         context["client"],
         context["transfer_payload"],
         dry_run=False,
@@ -506,7 +507,7 @@ def then_transaction_count_accurate_for_period(context: dict[str, Any]) -> None:
 
 @given("the event-based refactor introduces a single structured error-handling path per FR-71")
 def given_block_guard_setup(context: dict[str, Any], monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(module, "BLOCK_TRANSACTION_POSTS", True)
+    monkeypatch.setattr(service_module, "BLOCK_TRANSACTION_POSTS", True)
     context["client"] = make_client()
     context["transfer_payload"] = {
         "type": "transfer",
@@ -524,7 +525,7 @@ def when_block_guard_hit(context: dict[str, Any]) -> None:
     context["transaction_result"] = module.create_transaction(
         context["client"], "2025-01-05", "Shop", "-10,00", 42, account_name="SEB"
     )
-    context["transfer_result"] = module._post_transfer(
+    context["transfer_result"] = module.post_transfer(
         context["client"], context["transfer_payload"], dry_run=False, source_name="A", destination_name="B"
     )
 

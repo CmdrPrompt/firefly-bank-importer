@@ -35,7 +35,9 @@ import pytest
 from firefly_python_api import FireflyClient
 
 import firefly_bank_importer.import_firefly as module
-from firefly_bank_importer.import_firefly import _post_transfer, _run_threaded_import, main
+import firefly_bank_importer.service as service_module
+from firefly_bank_importer.import_firefly import _run_threaded_import, main
+from firefly_bank_importer.service import post_transfer as _post_transfer
 
 SEB_HEADERS = ["Bokföringsdatum", "Valutadatum", "Verifikationsnummer", "Text", "Belopp", "Saldo"]
 
@@ -267,7 +269,7 @@ class TestBlockTransactionPostsGuardAsymmetry:
     def test_run_threaded_import_yields_error_result_on_block_guard(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from firefly_bank_importer.service import TransactionStatus
 
-        monkeypatch.setattr(module, "BLOCK_TRANSACTION_POSTS", True)
+        monkeypatch.setattr(service_module, "BLOCK_TRANSACTION_POSTS", True)
         client = make_client()
         pending = [("2025-01-05", "Shop", "-50.00")]
 
@@ -283,7 +285,7 @@ class TestBlockTransactionPostsGuardAsymmetry:
     ) -> None:
         from firefly_bank_importer.service import TransactionStatus
 
-        monkeypatch.setattr(module, "BLOCK_TRANSACTION_POSTS", True)
+        monkeypatch.setattr(service_module, "BLOCK_TRANSACTION_POSTS", True)
         client = make_client()
         payload = {
             "type": "transfer",

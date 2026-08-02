@@ -2,7 +2,7 @@
 
 I didn't quite like the built-in Firefly III import tool for several reasons, one of them being that it seemed very slow and probably very serial.
 
-So, here's another import tool for importing bank transactions into Firefly III. This one is a Python CLI tool (and importable service layer) for importing bank transactions from CSV exports (currently SEB, ICA, and Nordea formats) into [Firefly III](https://www.firefly-iii.org/) via its REST API.
+So, here's another import tool for importing bank transactions into Firefly III. This one is a Python CLI tool (and importable service layer) for importing bank transactions from CSV exports (currently SEB, ICA, and Nordea formats) into [Firefly III](https://www.firefly-iii.org/) via its REST API. See [`docs/SERVICE_LAYER_INTERFACE.md`](docs/SERVICE_LAYER_INTERFACE.md) for the stable, documented public interface external applications can import (`firefly_bank_importer.service`).
 
 - Multi-threaded imports makes this faster than the original one
 - Discovers asset accounts from Firefly and caches them locally

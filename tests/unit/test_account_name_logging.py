@@ -19,12 +19,12 @@ from firefly_python_api import FireflyClient
 
 import firefly_bank_importer.import_firefly as module
 from firefly_bank_importer.import_firefly import (
-    _post_transfer,
     _render_transaction_result,
     _render_transfer_result,
     _resolve_account_name,
     create_transaction,
     main,
+    post_transfer,
 )
 
 
@@ -128,7 +128,7 @@ class TestPostTransferAccountNames:
 
     def test_live_log_uses_account_names(self, caplog: pytest.LogCaptureFixture) -> None:
         client = make_client()
-        result = _post_transfer(
+        result = post_transfer(
             client,
             self._payload(),
             dry_run=False,
@@ -144,7 +144,7 @@ class TestPostTransferAccountNames:
 
     def test_dry_run_log_uses_account_names(self, caplog: pytest.LogCaptureFixture) -> None:
         client = make_client()
-        result = _post_transfer(
+        result = post_transfer(
             client,
             self._payload(),
             dry_run=True,
@@ -160,7 +160,7 @@ class TestPostTransferAccountNames:
 
     def test_falls_back_to_numeric_ids_when_names_omitted(self, caplog: pytest.LogCaptureFixture) -> None:
         client = make_client()
-        result = _post_transfer(client, self._payload(), dry_run=False)
+        result = post_transfer(client, self._payload(), dry_run=False)
         with caplog.at_level(logging.INFO):
             _render_transfer_result(result, dry_run=False)
         assert any("1 -> 2" in r.message for r in caplog.records)
