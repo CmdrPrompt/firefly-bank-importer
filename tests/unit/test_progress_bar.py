@@ -8,7 +8,7 @@ and updated once per row processed.
 import csv
 from datetime import date
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -119,10 +119,18 @@ class TestProcessCsvProgressBar:
         assert FakeTqdm.instances[0].updates == 2
 
 
-class TestPostTransferProgressBar:
-    def test_updates_on_success(self) -> None:
+class TestPostTransferReturnsResult:
+    """TASK-067: `_post_transfer` no longer accepts a `pbar` parameter or
+    advances any progress bar itself (FR-71); it just returns a structured
+    `TransferResult`. The shared multi-folder progress bar is now owned and
+    advanced by the CLI adapter (`_render_multi_folder_import`), exercised
+    by `TestMultiFolderProgressBar` below.
+    """
+
+    def test_returns_ok_result_on_success(self) -> None:
+        from firefly_bank_importer.service import TransactionStatus
+
         client = make_client()
-        pbar = FakeTqdm(total=1)
         payload = {
             "type": "transfer",
             "date": "2025-01-05",
@@ -132,13 +140,14 @@ class TestPostTransferProgressBar:
             "destination_id": "2",
             "currency_code": "SEK",
         }
-        _post_transfer(client, payload, dry_run=False, pbar=cast(Any, pbar))
-        assert pbar.updates == 1
+        result = _post_transfer(client, payload, dry_run=False)
+        assert result.status == TransactionStatus.OK
 
-    def test_updates_even_when_post_raises(self) -> None:
+    def test_returns_error_result_when_post_raises(self) -> None:
+        from firefly_bank_importer.service import TransactionStatus
+
         client = make_client()
         client.create_transaction.side_effect = FireflyConnectionError("boom")
-        pbar = FakeTqdm(total=1)
         payload = {
             "type": "transfer",
             "date": "2025-01-05",
@@ -148,12 +157,11 @@ class TestPostTransferProgressBar:
             "destination_id": "2",
             "currency_code": "SEK",
         }
-        _post_transfer(client, payload, dry_run=False, pbar=cast(Any, pbar))
-        assert pbar.updates == 1
+        result = _post_transfer(client, payload, dry_run=False)
+        assert result.status == TransactionStatus.ERROR
 
-    def test_updates_in_dry_run(self) -> None:
+    def test_dry_run_does_not_call_client(self) -> None:
         client = make_client()
-        pbar = FakeTqdm(total=1)
         payload = {
             "type": "transfer",
             "date": "2025-01-05",
@@ -163,21 +171,25 @@ class TestPostTransferProgressBar:
             "destination_id": "2",
             "currency_code": "SEK",
         }
-        _post_transfer(client, payload, dry_run=True, pbar=cast(Any, pbar))
-        assert pbar.updates == 1
+        _post_transfer(client, payload, dry_run=True)
         client.create_transaction.assert_not_called()
 
 
-class TestPostUnmatchedRowsProgressBar:
-    def test_dry_run_updates_once_per_row(self) -> None:
+class TestPostUnmatchedRowsYieldsResults:
+    """TASK-067: `_post_unmatched_rows` is a generator yielding
+    `TransactionResult` per row (FR-71); it no longer accepts `pbar`. The
+    shared progress bar is advanced once per yielded result by the CLI
+    adapter, exercised by `TestMultiFolderProgressBar` below.
+    """
+
+    def test_dry_run_yields_one_result_per_row(self) -> None:
         client = make_client()
-        pbar = FakeTqdm(total=2)
         rows = [
             PendingRow(1, "Account A", "2025-01-05", "X", "-10.00", "seb", date(2025, 1, 5)),
             PendingRow(2, "Account B", "2025-01-05", "Y", "20.00", "seb", date(2025, 1, 5)),
         ]
-        _post_unmatched_rows(client, rows, dry_run=True, pbar=cast(Any, pbar))
-        assert pbar.updates == 2
+        results = list(_post_unmatched_rows(client, rows, dry_run=True))
+        assert len(results) == 2
         client.create_transaction.assert_not_called()
 
 
