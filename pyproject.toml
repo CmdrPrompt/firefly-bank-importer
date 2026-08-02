@@ -27,6 +27,7 @@ dev = [
     "coverage",
     "types-tqdm",
     "pip-audit",
+    "pytest-bdd",
 ]
 
 [project.scripts]
@@ -71,6 +72,7 @@ skips = []
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+bdd_features_base_dir = "tests/bdd/features"
 
 [build-system]
 requires = ["setuptools>=68"]
