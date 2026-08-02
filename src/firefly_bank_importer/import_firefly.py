@@ -10,7 +10,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, NamedTuple, TypedDict, cast
+from typing import Any, TypedDict, cast
 
 from firefly_python_api import FireflyClient, FireflyConnectionError
 from tqdm import tqdm
@@ -18,6 +18,31 @@ from tqdm import tqdm
 from firefly_bank_importer.bank_formats import resolve_bank_format
 from firefly_bank_importer.bank_formats.base import BankFormat, ColumnMapping
 from firefly_bank_importer.config import load_api_token, load_firefly_url
+from firefly_bank_importer.service import (
+    MAX_TRANSFER_DATE_DIFF_DAYS,
+    PendingRow,
+    _candidates_for_row,
+    _choose_among,
+    _choose_candidate,
+    _description_overlap,
+    _is_amount_and_date_match,
+    _match_transfer_pairs,
+    _resolve_row_choice,
+    parse_amount,
+)
+
+__all__ = [
+    "MAX_TRANSFER_DATE_DIFF_DAYS",
+    "PendingRow",
+    "_candidates_for_row",
+    "_choose_among",
+    "_choose_candidate",
+    "_description_overlap",
+    "_is_amount_and_date_match",
+    "_match_transfer_pairs",
+    "_resolve_row_choice",
+    "parse_amount",
+]
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 ACCOUNT_CACHE_FILE = _PROJECT_ROOT / "accounts_cache.json"
@@ -33,21 +58,6 @@ class Account(TypedDict):
 
 
 PendingTransaction = tuple[str, str, str]
-
-
-class PendingRow(NamedTuple):
-    """A parsed CSV row awaiting posting, tagged with its account and bank
-    format so cross-account transfer matching (UC-31) can compare rows from
-    different folders.
-    """
-
-    account_id: int
-    account_name: str
-    iso_date: str
-    description: str
-    amount: str
-    bank_format: str
-    row_date: date
 
 
 def setup_logging() -> str:
@@ -354,14 +364,6 @@ def _apply_auto_opening_balance(
         logging.info(f"  Satte opening balance: {balance} SEK per {iso_date} (rad exkluderad fran import).")
 
     return datetime.strptime(iso_date, "%Y-%m-%d").date()
-
-
-def parse_amount(raw_amount: str) -> float:
-    cleaned = raw_amount.strip()
-    cleaned = re.sub(r"\s*(kr|sek)\s*", "", cleaned, flags=re.IGNORECASE)
-    cleaned = cleaned.replace(" ", "")
-    cleaned = cleaned.replace(",", ".")
-    return float(cleaned)
 
 
 def _build_transaction_payload(date: str, description: str, amount: float, account_id: int) -> dict[str, str]:
@@ -691,91 +693,6 @@ def _gather_folder_pending(
     if total_skipped:
         logging.info(f"  Hoppade over: {total_skipped} rader")
     return all_rows
-
-
-def _description_overlap(a: str, b: str) -> bool:
-    a_lower, b_lower = a.lower(), b.lower()
-    return a_lower in b_lower or b_lower in a_lower
-
-
-MAX_TRANSFER_DATE_DIFF_DAYS = 3
-
-
-def _is_amount_and_date_match(row: PendingRow, other: PendingRow) -> bool:
-    if other.account_id == row.account_id:
-        return False
-    if abs(parse_amount(row.amount) + parse_amount(other.amount)) > 0.005:
-        return False
-    return abs((row.row_date - other.row_date).days) <= MAX_TRANSFER_DATE_DIFF_DAYS
-
-
-def _candidates_for_row(idx: int, rows: list[PendingRow], excluded: set[int]) -> list[int]:
-    row = rows[idx]
-    return [
-        j for j, other in enumerate(rows) if j != idx and j not in excluded and _is_amount_and_date_match(row, other)
-    ]
-
-
-def _choose_among(row: PendingRow, rows: list[PendingRow], candidates: list[int]) -> int | None:
-    """Pick the single candidate whose description overlaps row's, or None."""
-    overlapping = [j for j in candidates if _description_overlap(row.description, rows[j].description)]
-    if len(overlapping) == 1:
-        return overlapping[0]
-    return None
-
-
-def _choose_candidate(row: PendingRow, rows: list[PendingRow], candidates: list[int]) -> int | None:
-    """Choose a matching candidate per UC-31/FR-66 (TASK-056).
-
-    Same-day (0-day) candidates use amount-only matching when unambiguous;
-    a lone same-day candidate is chosen outright. With several same-day
-    candidates, description overlap disambiguates. Candidates 1-3 days away
-    are only ever chosen via description overlap — an amount-only match is
-    never made across differing dates, to avoid pairing unrelated
-    transactions that coincidentally share an amount.
-    """
-    same_day = [j for j in candidates if rows[j].row_date == row.row_date]
-    if len(same_day) == 1:
-        return same_day[0]
-    if len(same_day) > 1:
-        return _choose_among(row, rows, same_day)
-    near_day = [j for j in candidates if rows[j].row_date != row.row_date]
-    return _choose_among(row, rows, near_day)
-
-
-def _resolve_row_choice(idx: int, rows: list[PendingRow], matched: set[int]) -> int | None:
-    candidates = _candidates_for_row(idx, rows, matched)
-    if not candidates:
-        return None
-    return _choose_candidate(rows[idx], rows, candidates)
-
-
-def _match_transfer_pairs(rows: list[PendingRow]) -> tuple[list[tuple[int, int]], set[int]]:
-    """Pair rows across different accounts per UC-31 (FR-66).
-
-    A pair is only formed when the match is mutual: row i's best (possibly
-    disambiguated) candidate is j, and j's own best candidate is i. This
-    avoids one row in an ambiguous group "stealing" a pairing just because
-    it happens to be processed first while looking unambiguous from its own
-    side (e.g. three same-amount rows where two share the same counterpart
-    candidates).
-
-    Returns (pairs of row indices, set of all matched row indices).
-    """
-    matched: set[int] = set()
-    pairs: list[tuple[int, int]] = []
-    for i in range(len(rows)):
-        if i in matched:
-            continue
-        chosen = _resolve_row_choice(i, rows, matched)
-        if chosen is None:
-            continue
-        if _resolve_row_choice(chosen, rows, matched) != i:
-            continue
-        pairs.append((i, chosen))
-        matched.add(i)
-        matched.add(chosen)
-    return pairs, matched
 
 
 def _build_transfer_payload(a: PendingRow, b: PendingRow) -> dict[str, str]:

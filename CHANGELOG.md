@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New `--period YYYY-MM` flag imports a single month's `YYYY-MM.csv` file across all account folders in one run, instead of every monthly file in each folder. Cross-account transfer detection still runs, scoped to that month's rows. Folders without a matching file for the period are skipped like today's "no CSV files" case (TASK-058).
 - Transaction log lines now show the Firefly account name instead of its numeric ID, for both withdrawal/deposit rows (`[OK]/[DRY RUN] [<account name>] [<type>] ...`) and cross-account transfers (`... | <source name> -> <destination name> | ...`), falling back to the numeric ID if a name can't be resolved. The same format appears in both the terminal and the log file (TASK-059).
 - Every import run now logs the total elapsed time (`H:MM:SS`) and the average time per transaction (in seconds) as the final lines of the run, after "Klar!"; the average line is omitted when no transactions were attempted (TASK-059).
+- Cross-account transfer matching and structured result/event types (`TransactionResult`, `FolderResult`, `ProgressEvent`) now live in a new `firefly_bank_importer.service` module with no dependency on `tqdm`, `argparse`, or stdout, so external applications can import the matching logic without pulling in CLI-only concerns (TASK-066).
 
 ### Fixed
 
