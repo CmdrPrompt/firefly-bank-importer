@@ -123,7 +123,13 @@ class TestTransactionResultContract:
         assert result.description == "Shop"
         assert result.account_id == 42
         assert result.account_name == "SEB Lonekonto"
-        assert result.amount == pytest.approx(10.0)
+        # Implementation Worker note (TASK-067 deviation): amount is the
+        # *signed* parsed amount (matching parse_amount()'s output and the
+        # `test_create_transaction_result_amount_matches_parsed_amount`
+        # property test below), not an absolute value. This lets the CLI
+        # derive the withdrawal/deposit type from the sign alone, since no
+        # separate `type` field is part of the TransactionResult contract.
+        assert result.amount == pytest.approx(-10.0)
         assert result.error_message is None
 
     def test_create_transaction_emits_no_logging_calls(self, caplog: pytest.LogCaptureFixture) -> None:

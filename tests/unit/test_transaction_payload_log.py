@@ -1,6 +1,10 @@
-"""Characterisation tests for _build_transaction_payload and _log_tx_result.
+"""Characterisation tests for _build_transaction_payload and the CLI
+adapter's transaction-result rendering.
 
-Documents current behavior as-is.
+Documents current behavior as-is. TASK-067 moved OK/error line rendering
+out of the (now pure) posting functions and into
+`_render_transaction_result`, a thin CLI adapter helper that renders a
+`TransactionResult` to the log exactly as `_log_tx_result` used to (FR-71/72).
 """
 
 import logging
@@ -11,8 +15,25 @@ from hypothesis import strategies as st
 
 from firefly_bank_importer.import_firefly import (
     _build_transaction_payload,
-    _log_tx_result,
+    _render_transaction_result,
 )
+from firefly_bank_importer.service import TransactionResult, TransactionStatus
+
+
+def _render(transaction_type: str, amount_abs: float, tx_date: str, description: str, account_name: str) -> None:
+    """Build a TransactionResult matching the old _log_tx_result() inputs
+    and render it, for characterization tests that predate the event-based
+    refactor and only care about the rendered OK line's content."""
+    signed_amount = -amount_abs if transaction_type == "withdrawal" else amount_abs
+    result = TransactionResult(
+        date=tx_date,
+        amount=signed_amount,
+        account_id=1,
+        status=TransactionStatus.OK,
+        description=description,
+        account_name=account_name,
+    )
+    _render_transaction_result(result, dry_run=False)
 
 
 class TestBuildTransactionPayloadWithdrawal:
@@ -91,23 +112,23 @@ class TestBuildTransactionPayloadHypothesis:
         assert "source_id" not in payload
 
 
-class TestLogTxResult:
+class TestRenderTransactionResult:
     def test_logs_ok_line(self, caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.INFO):
-            _log_tx_result("withdrawal", 100.0, "2025-01-01", "X", "1")
+            _render("withdrawal", 100.0, "2025-01-01", "X", "1")
         assert any("[OK]" in r.message for r in caplog.records)
 
     def test_logs_transaction_type(self, caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.INFO):
-            _log_tx_result("deposit", 50.0, "2025-01-01", "Salary", "1")
+            _render("deposit", 50.0, "2025-01-01", "Salary", "1")
         assert any("deposit" in r.message for r in caplog.records)
 
     def test_logs_amount(self, caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.INFO):
-            _log_tx_result("withdrawal", 42.50, "2025-01-01", "Test", "1")
+            _render("withdrawal", 42.50, "2025-01-01", "Test", "1")
         assert any("42.50" in r.message for r in caplog.records)
 
     def test_logs_account_name(self, caplog: pytest.LogCaptureFixture) -> None:
         with caplog.at_level(logging.INFO):
-            _log_tx_result("withdrawal", 42.50, "2025-01-01", "Test", "SEB Lönekonto Thomas")
+            _render("withdrawal", 42.50, "2025-01-01", "Test", "SEB Lönekonto Thomas")
         assert any("[SEB Lönekonto Thomas]" in r.message for r in caplog.records)

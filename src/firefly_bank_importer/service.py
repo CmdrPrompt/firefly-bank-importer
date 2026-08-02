@@ -42,6 +42,47 @@ class TransactionResult:
     account_id: int
     status: TransactionStatus
     error_message: str | None = None
+    description: str = ""
+    account_name: str = ""
+
+
+@dataclass(frozen=True)
+class TransferResult:
+    """Outcome of posting (or attempting to post) a transfer between two
+    accounts (UC-31/FR-66)."""
+
+    date: str
+    amount: float
+    description: str
+    source_account_id: int
+    source_account_name: str
+    destination_account_id: int
+    destination_account_name: str
+    status: TransactionStatus
+    error_message: str | None = None
+
+
+@dataclass(frozen=True)
+class OpeningBalanceResult:
+    """Outcome of auto-detecting and setting an account's opening balance
+    (UC-30/FR-65)."""
+
+    account_id: int
+    balance: float
+    date: str
+    excluded_row_date: str
+    dry_run: bool
+
+
+@dataclass(frozen=True)
+class TransferDetectionSummary:
+    """Count of transfer pairs detected during a multi-folder import
+    (UC-31), emitted once before the per-item posting results so the CLI
+    can render the "Detekterade N overforing(ar)..." summary line and size
+    its progress bar before consuming the rest of the stream."""
+
+    pairs_count: int
+    total: int
 
 
 @dataclass(frozen=True)

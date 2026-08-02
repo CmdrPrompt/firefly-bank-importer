@@ -15,6 +15,7 @@ from hypothesis import strategies as st
 from firefly_bank_importer.bank_formats import get_registered_bank_formats, resolve_bank_format
 from firefly_bank_importer.bank_formats.nordea import NORDEA_FORMAT
 from firefly_bank_importer.import_firefly import process_csv, split_file_in_place
+from firefly_bank_importer.service import TransactionResult, TransactionStatus
 
 NORDEA_HEADERS = ["Bokföringsdag", "Belopp", "Avsändare", "Mottagare", "Namn", "Rubrik", "Saldo", "Valuta"]
 NORDEA_REQUIRED = {"Bokföringsdag", "Belopp", "Rubrik"}
@@ -268,6 +269,9 @@ class TestNordeaProcessCsv:
         )
         client = MagicMock()
         with patch("firefly_bank_importer.import_firefly.create_transaction") as mock_create:
+            mock_create.return_value = TransactionResult(
+                date="2026-03-01", amount=-35.0, account_id=1, status=TransactionStatus.OK
+            )
             process_csv(client, csv_path, account_id=1, dry_run=True)
         mock_create.assert_called_once()
 
@@ -282,6 +286,9 @@ class TestNordeaProcessCsv:
         )
         client = MagicMock()
         with patch("firefly_bank_importer.import_firefly.create_transaction") as mock_create:
+            mock_create.return_value = TransactionResult(
+                date="2026-03-15", amount=-10.0, account_id=1, status=TransactionStatus.OK
+            )
             process_csv(
                 client,
                 csv_path,

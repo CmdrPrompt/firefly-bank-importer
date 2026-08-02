@@ -1,7 +1,8 @@
 """Characterisation tests for easy coverage wins (TASK-009).
 
 Covers: save_account_cache, create_import_folders, auto_split_folder,
-split_file_in_place (empty-row branch), create_transaction (BLOCK guard + log=True).
+split_file_in_place (empty-row branch), create_transaction (BLOCK guard,
+result rendering).
 """
 
 import csv
@@ -167,29 +168,38 @@ class TestSplitFileInPlaceEmptyRows:
 
 
 class TestCreateTransactionBlock:
-    def test_raises_when_blocked(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_returns_error_result_when_blocked(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """TASK-067: the BLOCK_TRANSACTION_POSTS guard no longer raises;
+        create_transaction is a pure function (FR-71) that returns a
+        structured ERROR TransactionResult instead, so the CLI can render
+        it and the run can continue."""
+        from firefly_bank_importer.service import TransactionStatus
+
         monkeypatch.setattr(module, "BLOCK_TRANSACTION_POSTS", True)
         client = make_client()
-        with pytest.raises(RuntimeError, match="blockerad"):
-            create_transaction(client, "2025-01-10", "Test", "-50,00", ACCOUNT_ID)
+        result = create_transaction(client, "2025-01-10", "Test", "-50,00", ACCOUNT_ID)
+        assert result.status == TransactionStatus.ERROR
+        assert result.error_message is not None and "blockerad" in result.error_message
+        client.create_transaction.assert_not_called()
 
 
-class TestCreateTransactionLogTrue:
-    def test_returns_tuple_on_success(self) -> None:
+class TestCreateTransactionResult:
+    def test_returns_transaction_result_on_success(self) -> None:
+        from firefly_bank_importer.service import TransactionStatus
+
         client = make_client()
-        result = create_transaction(client, "2025-01-10", "Kaffebar", "-35,00", ACCOUNT_ID, log=True)
-        assert result is not None
-        tx_type, amount_abs = result
-        assert tx_type == "withdrawal"
-        assert amount_abs == pytest.approx(35.0)
+        result = create_transaction(client, "2025-01-10", "Kaffebar", "-35,00", ACCOUNT_ID)
+        assert result.status == TransactionStatus.OK
+        assert result.amount == pytest.approx(-35.0)
 
-    def test_logs_ok_line(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_render_transaction_result_logs_ok_line(self, caplog: pytest.LogCaptureFixture) -> None:
         client = make_client()
+        result = create_transaction(client, "2025-01-10", "Kaffebar", "-35,00", ACCOUNT_ID)
         with caplog.at_level(logging.INFO):
-            create_transaction(client, "2025-01-10", "Kaffebar", "-35,00", ACCOUNT_ID, log=True)
+            module._render_transaction_result(result, dry_run=False)
         assert any("[OK]" in r.message for r in caplog.records)
 
     def test_client_create_transaction_called(self) -> None:
         client = make_client()
-        create_transaction(client, "2025-01-10", "X", "-10,00", ACCOUNT_ID, log=False)
+        create_transaction(client, "2025-01-10", "X", "-10,00", ACCOUNT_ID)
         client.create_transaction.assert_called_once()
