@@ -1,7 +1,7 @@
 # TASK-017 Web UI account matching
 
 ## Status
-done
+cancelled
 
 ## Description
 Implement UC-17 in the web UI: allow interactive mapping between selected folders and Firefly accounts.
@@ -21,3 +21,5 @@ Implement UC-17 in the web UI: allow interactive mapping between selected folder
 **Branch:** `git checkout -b task/017-web-ui-account-matching`
 **Stage:** `git add src/firefly_bank_importer/web_ui.py tests/unit/test_web_ui_account_matching.py docs/tasks/TASK-017-web-ui-account-matching.md`
 **Commit:** `git commit -m "Implement web UI account matching (UC-17)"`
+
+> **Superseded (2026-08-01):** The web UI (`web_ui.py` and its tests) has been removed from this repository. The web frontend is being rebuilt as a standalone application in a separate repository, consuming this project's service layer as a library. This task's original status was `done`; its scope no longer applies here.

@@ -1,7 +1,7 @@
 # TASK-018 Web UI dry-run preview
 
 ## Status
-done
+cancelled
 
 ## Description
 Implement UC-18 in the web UI: provide dry-run preview for selected folders and account mappings before live import.
@@ -21,3 +21,5 @@ Implement UC-18 in the web UI: provide dry-run preview for selected folders and 
 **Branch:** `git checkout -b task/018-web-ui-dry-run-preview`
 **Stage:** `git add src/firefly_bank_importer/web_ui.py tests/unit/test_web_ui_dry_run_preview.py docs/tasks/TASK-018-web-ui-dry-run-preview.md`
 **Commit:** `git commit -m "Implement web UI dry-run preview"`
+
+> **Superseded (2026-08-01):** The web UI (`web_ui.py` and its tests) has been removed from this repository. The web frontend is being rebuilt as a standalone application in a separate repository, consuming this project's service layer as a library. This task's original status was `done`; its scope no longer applies here.

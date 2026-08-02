@@ -4,13 +4,9 @@ version = "0.1.0"
 description = "Python tool for importing bank CSV exports into Firefly III, with automatic date filtering to avoid duplicate transactions."
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.116.1",
     "firefly-python-api",
-    "httpx>=0.28.1",
-    "python-multipart>=0.0.9",
     "requests>=2.31",
     "tqdm>=4.66",
-    "uvicorn>=0.35.0",
 ]
 
 [tool.uv.sources]
@@ -29,16 +25,12 @@ dev = [
     "types-requests",
     "hypothesis",
     "coverage",
-    "fastapi",
-    "uvicorn",
-    "httpx",
     "types-tqdm",
     "pip-audit",
 ]
 
 [project.scripts]
 firefly-import = "firefly_bank_importer.import_firefly:main"
-firefly-import-web = "firefly_bank_importer.web_ui:main"
 firefly-clear-transactions = "firefly_bank_importer.clear_transactions:main"
 
 [tool.ruff]
@@ -57,18 +49,8 @@ module = [
     "pytest",
     "hypothesis",
     "hypothesis.strategies",
-    "fastapi",
-    "fastapi.responses",
-    "fastapi.*",
-    "uvicorn",
-    "uvicorn.*",
-    "fastapi.testclient",
 ]
 ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = ["firefly_bank_importer.web_ui"]
-disable_error_code = ["misc"]
 
 [[tool.mypy.overrides]]
 module = ["firefly_python_api", "firefly_python_api.*"]

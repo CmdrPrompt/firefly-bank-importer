@@ -1,7 +1,7 @@
 # TASK-033 Fix saknad POST /account-mapping route gör UI-flödet oanvändbart
 
 ## Status
-todo
+cancelled
 
 ## Description
 Formuläret på kontovalsssidan postar till `/account-mapping` (rad 1473 i `web_ui.py`),
@@ -26,3 +26,5 @@ från kontoval till dry-run och live import via web UI är därmed oanvändbart.
 **Branch:** `git checkout -b task/033-fix-missing-account-mapping-route`
 **Stage:** `git add docs/tasks/TASK-033-fix-missing-account-mapping-route.md`
 **Commit:** `git commit -m "Fix missing POST /account-mapping route"`
+
+> **Superseded (2026-08-01):** The web UI (`web_ui.py` and its tests) has been removed from this repository. The web frontend is being rebuilt as a standalone application in a separate repository, consuming this project's service layer as a library. This task's original status was `todo`; its scope no longer applies here.

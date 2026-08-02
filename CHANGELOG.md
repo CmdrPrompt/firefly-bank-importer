@@ -43,6 +43,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `description_idx` bounds-check inside `_build_live_import_description` in `web_ui.py` to guard against out-of-bounds access if called outside its normal context (TASK-030).
 - Documented the design decision that empty CSV files are warnings (non-blocking) while unknown formats are errors (blocking) in `web_ui.py` (TASK-030).
 
+### Removed
+
+- The local FastAPI/Jinja2/HTMX web UI (`web_ui.py` and its test suite) has been removed from this repository, along with the `firefly-import-web` console script, the `fastapi`/`uvicorn`/`python-multipart`/`httpx` dependencies, and the `make web` target. The web frontend is being rebuilt as a standalone application in a separate repository, consuming this project's import logic as an importable service layer instead of a locally-hosted HTTP UI (TASK-064).
+
 ### Added
 - Fixed `normalise_date` crash when importing already-split Nordea files: the method now falls back to ISO 8601 parsing if the bank-specific format does not match, making it idempotent for dates that were normalised during split (TASK-040).
 - Added Nordea bank CSV format support: the importer now recognises Nordea exports (`Bokföringsdag`, `Belopp`, `Rubrik` headers), normalises `YYYY/MM/DD` dates to ISO 8601, and converts Swedish comma-decimal amounts to US format before sending to the Firefly API (TASK-039).

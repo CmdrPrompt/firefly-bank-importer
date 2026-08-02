@@ -1,7 +1,7 @@
 # TASK-023 Web UI refresh accounts
 
 ## Status
-done
+cancelled
 
 ## Description
 Implement UC-21 in the web UI: trigger account refresh from Firefly and show refresh summary.
@@ -29,3 +29,5 @@ Implement UC-21 in the web UI: trigger account refresh from Firefly and show ref
 **Branch:** `git checkout -b task/023-web-ui-refresh-accounts`
 **Stage:** `git add src/firefly_bank_importer/web_ui.py tests/unit/test_web_ui_refresh_accounts.py docs/REQUIREMENTS_import_firefly.md CHANGELOG.md docs/tasks/TASK-023-web-ui-refresh-accounts.md`
 **Commit:** `git commit -m "Show account list on refresh-accounts result page"`
+
+> **Superseded (2026-08-01):** The web UI (`web_ui.py` and its tests) has been removed from this repository. The web frontend is being rebuilt as a standalone application in a separate repository, consuming this project's service layer as a library. This task's original status was `done`; its scope no longer applies here.
