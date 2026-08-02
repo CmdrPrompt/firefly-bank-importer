@@ -1,6 +1,6 @@
 """Characterisation tests for automatic opening balance detection (UC-30, FR-65).
 
-Covers _find_earliest_balance_row(), _apply_auto_opening_balance(), and their
+Covers _find_earliest_balance_row(), apply_auto_opening_balance(), and their
 integration into process_folder(). Uses tmp_path for CSV fixtures and
 unittest.mock for FireflyClient so no real API calls are made.
 """
@@ -17,10 +17,10 @@ import firefly_bank_importer.bank_formats as bank_formats
 import firefly_bank_importer.import_firefly as module
 from firefly_bank_importer.bank_formats.base import HeaderBankFormat
 from firefly_bank_importer.import_firefly import (
-    _apply_auto_opening_balance,
     _find_earliest_balance_row,
     _opening_balance_floor,
     _render_opening_balance_result,
+    apply_auto_opening_balance,
     process_folder,
 )
 
@@ -103,12 +103,12 @@ class TestFindEarliestBalanceRow:
 
 
 # ---------------------------------------------------------------------------
-# _apply_auto_opening_balance()
+# apply_auto_opening_balance()
 # ---------------------------------------------------------------------------
 
 
 class TestApplyAutoOpeningBalance:
-    """`_apply_auto_opening_balance` returns a structured `OpeningBalanceResult`
+    """`apply_auto_opening_balance` returns a structured `OpeningBalanceResult`
     (or `None`) and performs no `logging` calls itself (FR-71/FR-72); the
     caller renders the outcome via `_render_opening_balance_result` and
     derives an import-exclusion floor via `_opening_balance_floor`."""
@@ -117,7 +117,7 @@ class TestApplyAutoOpeningBalance:
         csv_path = tmp_path / "2025-01.csv"
         write_csv(csv_path, SEB_HEADERS, [["2025-01-05", "2025-01-05", "V1", "Old", "-10,00", "990,00"]])
         client = make_client(balance="0.00")
-        result = _apply_auto_opening_balance(client, 42, [csv_path], dry_run=False)
+        result = apply_auto_opening_balance(client, 42, [csv_path], dry_run=False)
         client.set_opening_balance.assert_called_once_with("42", "990.00", "2025-01-05")
         floor = _opening_balance_floor(result)
         assert floor is not None and floor.isoformat() == "2025-01-05"
@@ -126,7 +126,7 @@ class TestApplyAutoOpeningBalance:
         csv_path = tmp_path / "2025-01.csv"
         write_csv(csv_path, SEB_HEADERS, [["2025-01-05", "2025-01-05", "V1", "Old", "-10,00", "990,00"]])
         client = make_client(balance=None)
-        result = _apply_auto_opening_balance(client, 42, [csv_path], dry_run=False)
+        result = apply_auto_opening_balance(client, 42, [csv_path], dry_run=False)
         client.set_opening_balance.assert_called_once_with("42", "990.00", "2025-01-05")
         assert result is not None
 
@@ -134,7 +134,7 @@ class TestApplyAutoOpeningBalance:
         csv_path = tmp_path / "2025-01.csv"
         write_csv(csv_path, SEB_HEADERS, [["2025-01-05", "2025-01-05", "V1", "Old", "-10,00", "990,00"]])
         client = make_client(balance="500.00")
-        result = _apply_auto_opening_balance(client, 42, [csv_path], dry_run=False)
+        result = apply_auto_opening_balance(client, 42, [csv_path], dry_run=False)
         client.set_opening_balance.assert_not_called()
         assert result is None
 
@@ -145,7 +145,7 @@ class TestApplyAutoOpeningBalance:
         write_csv(csv_path, NO_BALANCE_HEADERS, [["2025-01-05", "Old", "-10,00"]])
         client = make_client(balance="0.00")
         with caplog.at_level(logging.WARNING):
-            result = _apply_auto_opening_balance(client, 42, [csv_path], dry_run=False)
+            result = apply_auto_opening_balance(client, 42, [csv_path], dry_run=False)
         client.set_opening_balance.assert_not_called()
         assert result is None
         assert caplog.records == []
@@ -157,7 +157,7 @@ class TestApplyAutoOpeningBalance:
         write_csv(csv_path, SEB_HEADERS, [["2025-01-05", "2025-01-05", "V1", "Old", "-10,00", "990,00"]])
         client = make_client(balance="0.00")
         with caplog.at_level(logging.INFO):
-            result = _apply_auto_opening_balance(client, 42, [csv_path], dry_run=True)
+            result = apply_auto_opening_balance(client, 42, [csv_path], dry_run=True)
         client.set_opening_balance.assert_not_called()
         floor = _opening_balance_floor(result)
         assert floor is not None and floor.isoformat() == "2025-01-05"
@@ -176,7 +176,7 @@ class TestApplyAutoOpeningBalance:
         client = MagicMock(spec=FireflyClient)
         client.get_opening_balance.side_effect = FireflyConnectionError("boom")
         with caplog.at_level(logging.WARNING):
-            result = _apply_auto_opening_balance(client, 42, [csv_path], dry_run=False)
+            result = apply_auto_opening_balance(client, 42, [csv_path], dry_run=False)
         client.set_opening_balance.assert_not_called()
         assert result is None
         assert caplog.records == []

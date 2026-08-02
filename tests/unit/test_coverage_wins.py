@@ -15,6 +15,7 @@ import pytest
 from firefly_python_api import FireflyClient
 
 import firefly_bank_importer.import_firefly as module
+import firefly_bank_importer.service as service_module
 from firefly_bank_importer.import_firefly import (
     Account,
     auto_split_folder,
@@ -175,7 +176,7 @@ class TestCreateTransactionBlock:
         it and the run can continue."""
         from firefly_bank_importer.service import TransactionStatus
 
-        monkeypatch.setattr(module, "BLOCK_TRANSACTION_POSTS", True)
+        monkeypatch.setattr(service_module, "BLOCK_TRANSACTION_POSTS", True)
         client = make_client()
         result = create_transaction(client, "2025-01-10", "Test", "-50,00", ACCOUNT_ID)
         assert result.status == TransactionStatus.ERROR

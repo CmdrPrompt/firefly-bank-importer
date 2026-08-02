@@ -6,68 +6,96 @@ import re
 import sys
 import time
 from collections import defaultdict
-from collections.abc import Callable, Iterator
-from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, TypedDict, cast
+from typing import Any, cast
 
 from firefly_python_api import FireflyClient, FireflyConnectionError
 from tqdm import tqdm
 
-from firefly_bank_importer.bank_formats import resolve_bank_format
-from firefly_bank_importer.bank_formats.base import BankFormat, ColumnMapping
 from firefly_bank_importer.config import load_api_token, load_firefly_url
 from firefly_bank_importer.service import (
+    BLOCK_GUARD_MESSAGE,
+    BLOCK_TRANSACTION_POSTS,
     MAX_TRANSFER_DATE_DIFF_DAYS,
+    Account,
     OpeningBalanceResult,
     PendingRow,
     TransactionResult,
     TransactionStatus,
     TransferDetectionSummary,
     TransferResult,
+    _build_transaction_payload,
     _candidates_for_row,
     _choose_among,
     _choose_candidate,
+    _collect_pending_rows,
+    _compute_latest_date_floor,
     _description_overlap,
+    _filter_csv_files_for_period,
+    _find_earliest_balance_row,
     _is_amount_and_date_match,
     _match_transfer_pairs,
+    _opening_balance_floor,
+    _post_transfer_and_unmatched_events,
+    _post_unmatched_rows,
+    _resolve_account_name,
+    _resolve_column_mapping,
     _resolve_row_choice,
+    _run_threaded_import,
+    _transaction_type_and_abs,
+    _validate_period,
+    apply_auto_opening_balance,
+    create_transaction,
+    fetch_accounts_from_firefly,
     parse_amount,
+    post_transfer,
+    run_multi_folder_import,
+    sanitize_folder_name,
 )
 
 __all__ = [
     "MAX_TRANSFER_DATE_DIFF_DAYS",
+    "Account",
+    "BLOCK_GUARD_MESSAGE",
+    "BLOCK_TRANSACTION_POSTS",
     "OpeningBalanceResult",
     "PendingRow",
     "TransactionResult",
     "TransactionStatus",
     "TransferDetectionSummary",
     "TransferResult",
+    "_build_transaction_payload",
     "_candidates_for_row",
     "_choose_among",
     "_choose_candidate",
+    "_collect_pending_rows",
+    "_compute_latest_date_floor",
     "_description_overlap",
+    "_filter_csv_files_for_period",
+    "_find_earliest_balance_row",
     "_is_amount_and_date_match",
     "_match_transfer_pairs",
+    "_opening_balance_floor",
+    "_post_transfer_and_unmatched_events",
+    "_post_unmatched_rows",
+    "_resolve_account_name",
+    "_resolve_column_mapping",
     "_resolve_row_choice",
+    "_run_threaded_import",
+    "_transaction_type_and_abs",
+    "_validate_period",
+    "apply_auto_opening_balance",
+    "create_transaction",
+    "fetch_accounts_from_firefly",
     "parse_amount",
+    "post_transfer",
+    "run_multi_folder_import",
+    "sanitize_folder_name",
 ]
-
-BLOCK_GUARD_MESSAGE = "POST av transaktion blockerad eftersom dry-run-skydd är aktivt."
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 ACCOUNT_CACHE_FILE = _PROJECT_ROOT / "accounts_cache.json"
-
-MAX_WORKERS = 5
-BLOCK_TRANSACTION_POSTS = False
-
-
-class Account(TypedDict):
-    id: int
-    name: str
-    type: str
-
 
 PendingTransaction = tuple[str, str, str]
 
@@ -85,11 +113,6 @@ def setup_logging() -> str:
         ],
     )
     return log_file
-
-
-def fetch_accounts_from_firefly(client: FireflyClient) -> list[Account]:
-    raw = client.get_asset_accounts()
-    return [{"id": int(a["id"]), "name": a["name"], "type": "asset"} for a in raw]
 
 
 def save_account_cache(accounts: list[Account]) -> None:
@@ -157,15 +180,6 @@ def build_account_map(
     return {a["name"]: a["id"] for a in accounts}, accounts
 
 
-def sanitize_folder_name(name: str) -> str:
-    name = name.replace("å", "a").replace("Å", "A")
-    name = name.replace("ä", "a").replace("Ä", "A")
-    name = name.replace("ö", "o").replace("Ö", "O")
-    name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name)
-    name = name.replace(" ", "_")
-    return name.strip("_")
-
-
 def create_import_folders(base: Path, accounts: list[Account]) -> None:
     created = 0
     for account in accounts:
@@ -201,28 +215,8 @@ def find_account_id(folder_name: str, account_map: dict[str, int]) -> int | None
     return matches[0][1]
 
 
-def _resolve_account_name(account_id: int, account_map: dict[str, int]) -> str:
-    for name, aid in account_map.items():
-        if aid == account_id:
-            return name
-    return str(account_id)
-
-
 MONTHLY_FILE_RE = re.compile(r"^\d{4}-\d{2}\.csv$")
 _KONTOUTDRAG_RE = re.compile(r"konto", re.IGNORECASE)
-PERIOD_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
-
-
-def _validate_period(period: str) -> None:
-    if not PERIOD_RE.match(period):
-        raise ValueError(f"Ogiltigt --period-varde: '{period}'. Ange formatet ÅÅÅÅ-MM (t.ex. 2025-06).")
-
-
-def _resolve_column_mapping(headers: list[str]) -> tuple[BankFormat, ColumnMapping] | None:
-    bank_format = resolve_bank_format(headers)
-    if bank_format is None:
-        return None
-    return bank_format, bank_format.build_column_mapping(headers)
 
 
 def split_file_in_place(input_file: Path) -> None:
@@ -297,89 +291,6 @@ def get_latest_transaction_date(client: FireflyClient, account_id: int) -> date 
     return max(dates) if dates else None
 
 
-def _earliest_balance_row_in_rows(
-    reader: Any, bank_format: BankFormat, mapping: ColumnMapping
-) -> tuple[date, str, str] | None:
-    earliest: tuple[date, str, str] | None = None
-    for row in reader:
-        with contextlib.suppress(ValueError, IndexError):
-            iso_date = bank_format.normalise_date(row[mapping.date_idx])
-            row_date = datetime.strptime(iso_date, "%Y-%m-%d").date()
-            balance = f"{parse_amount(row[mapping.balance_idx]):.2f}"
-            if earliest is None or row_date < earliest[0]:
-                earliest = (row_date, iso_date, balance)
-    return earliest
-
-
-def _earliest_balance_row_in_file(csv_path: Path) -> tuple[date, str, str] | None:
-    with open(csv_path, encoding="utf-8-sig") as f:
-        reader = csv.reader(f, delimiter=";")
-        headers = next(reader)
-        resolved = _resolve_column_mapping(headers)
-        if resolved is None:
-            return None
-        bank_format, mapping = resolved
-        if mapping.balance_idx is None:
-            return None
-        return _earliest_balance_row_in_rows(reader, bank_format, mapping)
-
-
-def _find_earliest_balance_row(csv_files: list[Path]) -> tuple[str, str] | None:
-    """Return (iso_date, balance) of the earliest-dated row across csv_files.
-
-    Only considers files whose bank format defines a balance column. Returns
-    None if no such row is found (no balance column available, or no rows).
-    """
-    earliest: tuple[date, str, str] | None = None
-    for csv_path in csv_files:
-        candidate = _earliest_balance_row_in_file(csv_path)
-        if candidate is not None and (earliest is None or candidate[0] < earliest[0]):
-            earliest = candidate
-    if earliest is None:
-        return None
-    return earliest[1], earliest[2]
-
-
-def _apply_auto_opening_balance(
-    client: FireflyClient,
-    account_id: int,
-    csv_files: list[Path],
-    dry_run: bool,
-) -> OpeningBalanceResult | None:
-    """Set the account's opening balance from its earliest bank export row,
-    if the account's current opening balance is 0 (UC-30, FR-65).
-
-    Returns a structured result (FR-71) if an opening balance was set (or
-    would be set, in dry-run mode), so callers can exclude that row from
-    import and the CLI can render the outcome; returns None otherwise (no
-    logging is performed here -- rendering is the CLI's responsibility).
-    """
-    try:
-        current = client.get_opening_balance(str(account_id))
-    except FireflyConnectionError:
-        return None
-
-    balance_str = current.get("balance")
-    if balance_str is not None and parse_amount(balance_str) != 0:
-        return None
-
-    earliest = _find_earliest_balance_row(csv_files)
-    if earliest is None:
-        return None
-
-    iso_date, balance = earliest
-    if not dry_run:
-        client.set_opening_balance(str(account_id), balance, iso_date)
-
-    return OpeningBalanceResult(
-        account_id=account_id,
-        balance=parse_amount(balance),
-        date=iso_date,
-        excluded_row_date=iso_date,
-        dry_run=dry_run,
-    )
-
-
 def _render_opening_balance_result(result: OpeningBalanceResult | None) -> None:
     if result is None:
         return
@@ -393,38 +304,6 @@ def _render_opening_balance_result(result: OpeningBalanceResult | None) -> None:
         )
 
 
-def _opening_balance_floor(result: OpeningBalanceResult | None) -> date | None:
-    if result is None:
-        return None
-    return datetime.strptime(result.excluded_row_date, "%Y-%m-%d").date()
-
-
-def _build_transaction_payload(date: str, description: str, amount: float, account_id: int) -> dict[str, str]:
-    if amount < 0:
-        return {
-            "type": "withdrawal",
-            "date": date,
-            "amount": f"{abs(amount):.2f}",
-            "description": description,
-            "source_id": str(account_id),
-            "currency_code": "SEK",
-        }
-    return {
-        "type": "deposit",
-        "date": date,
-        "amount": f"{amount:.2f}",
-        "description": description,
-        "destination_id": str(account_id),
-        "currency_code": "SEK",
-    }
-
-
-def _transaction_type_and_abs(amount: float) -> tuple[str, float]:
-    """Derive the Firefly transaction type (withdrawal/deposit) and display
-    magnitude from a signed amount (negative = withdrawal, per FR-69)."""
-    return ("withdrawal" if amount < 0 else "deposit", abs(amount))
-
-
 def _render_transaction_result(result: TransactionResult, dry_run: bool) -> None:
     if result.status == TransactionStatus.ERROR:
         logging.error(f"  [FEL] {result.date} | {result.description}: {result.error_message}")
@@ -435,131 +314,6 @@ def _render_transaction_result(result: TransactionResult, dry_run: bool) -> None
         f"  {prefix} [{result.account_name}] [{transaction_type}] {amount_abs:.2f} SEK | "
         f"{result.date} | {result.description}"
     )
-
-
-def create_transaction(
-    client: FireflyClient,
-    date: str,
-    description: str,
-    amount: str | float,
-    account_id: int,
-    dry_run: bool = False,
-    account_name: str | None = None,
-) -> TransactionResult:
-    """Post (or simulate posting, in dry-run mode) a single transaction.
-
-    Returns a structured `TransactionResult` (FR-71); no `logging` calls are
-    made here -- rendering the outcome is the CLI adapter's job (FR-72).
-    """
-    parsed_amount = parse_amount(str(amount))
-    display_name = account_name if account_name is not None else str(account_id)
-
-    if dry_run:
-        return TransactionResult(
-            date=date,
-            amount=parsed_amount,
-            account_id=account_id,
-            status=TransactionStatus.OK,
-            description=description,
-            account_name=display_name,
-        )
-
-    if BLOCK_TRANSACTION_POSTS:
-        return TransactionResult(
-            date=date,
-            amount=parsed_amount,
-            account_id=account_id,
-            status=TransactionStatus.ERROR,
-            error_message=BLOCK_GUARD_MESSAGE,
-            description=description,
-            account_name=display_name,
-        )
-
-    payload = _build_transaction_payload(date, description, parsed_amount, account_id)
-    client.create_transaction({"transactions": [payload]})
-
-    return TransactionResult(
-        date=date,
-        amount=parsed_amount,
-        account_id=account_id,
-        status=TransactionStatus.OK,
-        description=description,
-        account_name=display_name,
-    )
-
-
-def _collect_pending_rows(
-    reader: Any,
-    datum_idx: int,
-    text_idx: int,
-    belopp_idx: int,
-    type_idx: int | None,
-    latest_date: date | None,
-    normalise_date: Callable[[str], str],
-) -> tuple[list[PendingTransaction], int]:
-    skipped = 0
-    pending: list[PendingTransaction] = []
-    for row in reader:
-        iso_date = normalise_date(row[datum_idx])
-        row_date = datetime.strptime(iso_date, "%Y-%m-%d").date()
-        if latest_date is not None and row_date <= latest_date:
-            skipped += 1
-            continue
-        description = row[text_idx].strip()
-        if type_idx is not None:
-            description = f"{description} [{row[type_idx].strip()}]"
-        pending.append((iso_date, description, row[belopp_idx]))
-    return pending, skipped
-
-
-def _submit_batch(
-    executor: ThreadPoolExecutor,
-    client: FireflyClient,
-    account_id: int,
-    account_name: str,
-    batch: list[PendingTransaction],
-) -> list[Any]:
-    return [
-        executor.submit(create_transaction, client, tx_date, desc, amount, account_id, False, account_name)
-        for tx_date, desc, amount in batch
-    ]
-
-
-def _handle_batch_result(fut: Any, tx_date: str, desc: str, account_id: int, account_name: str) -> TransactionResult:
-    """Resolve a submitted future into a structured `TransactionResult`,
-    turning any posting exception into an ERROR result instead of letting
-    it propagate (FR-71)."""
-    try:
-        return cast(TransactionResult, fut.result())
-    except (FireflyConnectionError, RuntimeError, ValueError) as exc:
-        return TransactionResult(
-            date=tx_date,
-            amount=0.0,
-            account_id=account_id,
-            status=TransactionStatus.ERROR,
-            error_message=str(exc),
-            description=desc,
-            account_name=account_name,
-        )
-
-
-def _run_threaded_import(
-    client: FireflyClient,
-    pending: list[PendingTransaction],
-    account_id: int,
-    account_name: str | None = None,
-) -> Iterator[TransactionResult]:
-    """Post `pending` transactions concurrently, yielding a `TransactionResult`
-    per row as it completes (FR-71). No progress bar or logging is owned
-    here -- the CLI adapter renders and advances its own tqdm bar per
-    yielded result."""
-    display_name = account_name if account_name is not None else str(account_id)
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        for batch_start in range(0, len(pending), MAX_WORKERS):
-            batch = pending[batch_start : batch_start + MAX_WORKERS]
-            futures = _submit_batch(executor, client, account_id, display_name, batch)
-            for fut, (tx_date, desc, _amount) in zip(futures, batch, strict=True):
-                yield _handle_batch_result(fut, tx_date, desc, account_id, display_name)
 
 
 def _run_dry_run_csv_import(
@@ -640,12 +394,6 @@ def process_csv(
     return len(pending)
 
 
-def _filter_csv_files_for_period(csv_files: list[Path], period: str | None) -> list[Path]:
-    if period is None:
-        return csv_files
-    return [f for f in csv_files if f.stem == period]
-
-
 def process_folder(
     client: FireflyClient,
     folder: Path,
@@ -668,7 +416,7 @@ def process_folder(
         return 0
 
     account_name = _resolve_account_name(account_id, account_map)
-    opening_balance_result = _apply_auto_opening_balance(client, account_id, csv_files, dry_run)
+    opening_balance_result = apply_auto_opening_balance(client, account_id, csv_files, dry_run)
     _render_opening_balance_result(opening_balance_result)
     opening_balance_floor = _opening_balance_floor(opening_balance_result)
 
@@ -705,24 +453,6 @@ def _resolve_folder_account_and_files(
         logging.warning(f"Inga CSV-filer i {folder.name}, hoppar över.")
         return None
     return account_id, csv_files
-
-
-def _compute_latest_date_floor(
-    client: FireflyClient,
-    account_id: int,
-    csv_files: list[Path],
-    dry_run: bool,
-    ignore_latest_date_check: bool,
-) -> date | None:
-    opening_balance_result = _apply_auto_opening_balance(client, account_id, csv_files, dry_run)
-    _render_opening_balance_result(opening_balance_result)
-    opening_balance_floor = _opening_balance_floor(opening_balance_result)
-    latest_date = None
-    if not ignore_latest_date_check:
-        latest_date = get_latest_transaction_date(client, account_id)
-    if opening_balance_floor is not None and (latest_date is None or opening_balance_floor > latest_date):
-        latest_date = opening_balance_floor
-    return latest_date
 
 
 def _collect_csv_pending_rows(
@@ -766,7 +496,16 @@ def _gather_folder_pending(
         return []
     account_id, csv_files = resolved
     account_name = _resolve_account_name(account_id, account_map)
-    latest_date = _compute_latest_date_floor(client, account_id, csv_files, dry_run, ignore_latest_date_check)
+
+    opening_balance_result = apply_auto_opening_balance(client, account_id, csv_files, dry_run)
+    _render_opening_balance_result(opening_balance_result)
+    opening_balance_floor = _opening_balance_floor(opening_balance_result)
+
+    latest_date = None
+    if not ignore_latest_date_check:
+        latest_date = get_latest_transaction_date(client, account_id)
+    if opening_balance_floor is not None and (latest_date is None or opening_balance_floor > latest_date):
+        latest_date = opening_balance_floor
 
     logging.info(f"Konto ID {account_id}: {folder.name}")
     if ignore_latest_date_check:
@@ -786,65 +525,6 @@ def _gather_folder_pending(
     return all_rows
 
 
-def _build_transfer_payload(a: PendingRow, b: PendingRow) -> dict[str, str]:
-    neg, pos = (a, b) if parse_amount(a.amount) < 0 else (b, a)
-    return {
-        "type": "transfer",
-        "date": neg.iso_date,
-        "amount": f"{abs(parse_amount(neg.amount)):.2f}",
-        "description": neg.description,
-        "source_id": str(neg.account_id),
-        "destination_id": str(pos.account_id),
-        "currency_code": "SEK",
-    }
-
-
-def _post_transfer(
-    client: FireflyClient,
-    payload: dict[str, str],
-    dry_run: bool,
-    source_name: str | None = None,
-    destination_name: str | None = None,
-) -> TransferResult:
-    """Post (or simulate posting) a transfer between two accounts (UC-31,
-    FR-66). Returns a structured `TransferResult`; no `logging` calls are
-    made here. A `BLOCK_TRANSACTION_POSTS` guard hit is reported as an
-    ERROR result rather than raised, matching `create_transaction`'s
-    handling of the same guard (FR-71 -- closes the pre-existing
-    inconsistency between the two posting paths)."""
-    amount = parse_amount(payload["amount"])
-    source_id = int(payload["source_id"])
-    destination_id = int(payload["destination_id"])
-    source_display = source_name if source_name is not None else payload["source_id"]
-    destination_display = destination_name if destination_name is not None else payload["destination_id"]
-
-    def _result(status: TransactionStatus, error_message: str | None = None) -> TransferResult:
-        return TransferResult(
-            date=payload["date"],
-            amount=amount,
-            description=payload["description"],
-            source_account_id=source_id,
-            source_account_name=source_display,
-            destination_account_id=destination_id,
-            destination_account_name=destination_display,
-            status=status,
-            error_message=error_message,
-        )
-
-    if dry_run:
-        return _result(TransactionStatus.OK)
-
-    if BLOCK_TRANSACTION_POSTS:
-        return _result(TransactionStatus.ERROR, BLOCK_GUARD_MESSAGE)
-
-    try:
-        client.create_transaction({"transactions": [payload]})
-    except FireflyConnectionError as exc:
-        return _result(TransactionStatus.ERROR, str(exc))
-
-    return _result(TransactionStatus.OK)
-
-
 def _render_transfer_result(result: TransferResult, dry_run: bool) -> None:
     if result.status == TransactionStatus.ERROR:
         logging.error(f"  [FEL] transfer {result.date}: {result.error_message}")
@@ -855,65 +535,6 @@ def _render_transfer_result(result: TransferResult, dry_run: bool) -> None:
     )
     prefix = "[DRY RUN]" if dry_run else "[OK]"
     logging.info(f"  {prefix} [transfer] {summary}")
-
-
-def _post_unmatched_rows(client: FireflyClient, rows: list[PendingRow], dry_run: bool) -> Iterator[TransactionResult]:
-    """Post rows that were not matched to a transfer (UC-31), grouped by
-    account. Yields a `TransactionResult` per row; no progress bar or
-    logging is owned here (FR-71)."""
-    by_account: dict[int, list[PendingTransaction]] = defaultdict(list)
-    account_names: dict[int, str] = {}
-    for row in rows:
-        by_account[row.account_id].append((row.iso_date, row.description, row.amount))
-        account_names[row.account_id] = row.account_name
-    for account_id, pending in by_account.items():
-        account_name = account_names[account_id]
-        if dry_run:
-            for tx_date, description, amount in pending:
-                yield create_transaction(
-                    client, tx_date, description, amount, account_id, dry_run=True, account_name=account_name
-                )
-        else:
-            yield from _run_threaded_import(client, pending, account_id, account_name=account_name)
-
-
-def _run_multi_folder_import(
-    client: FireflyClient,
-    folders: list[Path],
-    account_map: dict[str, int],
-    dry_run: bool,
-    ignore_latest_date_check: bool,
-    period: str | None = None,
-) -> Iterator[TransferDetectionSummary | TransferResult | TransactionResult]:
-    """Gather pending rows across all folders, detect cross-account
-    transfers (UC-31/FR-66), and post everything. Yields a
-    `TransferDetectionSummary` first (so the CLI can render the detection
-    count and size its progress bar), then a `TransferResult` per matched
-    pair, then a `TransactionResult` per unmatched row. No `tqdm` instance
-    is created here -- that is the CLI adapter's responsibility (FR-71/72).
-    """
-    all_rows: list[PendingRow] = []
-    for folder in folders:
-        all_rows.extend(_gather_folder_pending(client, folder, account_map, dry_run, ignore_latest_date_check, period))
-
-    pairs, matched = _match_transfer_pairs(all_rows)
-    unmatched = [row for idx, row in enumerate(all_rows) if idx not in matched]
-    total = len(pairs) + len(unmatched)
-
-    yield TransferDetectionSummary(pairs_count=len(pairs), total=total)
-
-    for i, j in pairs:
-        a, b = all_rows[i], all_rows[j]
-        neg, pos = (a, b) if parse_amount(a.amount) < 0 else (b, a)
-        yield _post_transfer(
-            client,
-            _build_transfer_payload(a, b),
-            dry_run,
-            source_name=neg.account_name,
-            destination_name=pos.account_name,
-        )
-
-    yield from _post_unmatched_rows(client, unmatched, dry_run)
 
 
 class _UnmatchedGroupRenderer:
@@ -961,10 +582,17 @@ def _render_multi_folder_import(
     ignore_latest_date_check: bool,
     period: str | None = None,
 ) -> int:
-    """CLI adapter: consumes `_run_multi_folder_import`'s event stream,
-    owns the single shared tqdm progress bar, and renders each event to
-    the log identically to the pre-TASK-067 behavior (FR-72)."""
-    events = _run_multi_folder_import(client, folders, account_map, dry_run, ignore_latest_date_check, period)
+    """CLI adapter: gathers pending rows per folder via `_gather_folder_pending`
+    (rendering its own per-folder log lines, unchanged from pre-TASK-067),
+    then consumes the shared service-layer `_post_transfer_and_unmatched_events`
+    event stream for transfer detection and posting, owning the single
+    shared tqdm progress bar and rendering each event to the log identically
+    to the pre-TASK-067 behavior (FR-72)."""
+    all_rows: list[PendingRow] = []
+    for folder in folders:
+        all_rows.extend(_gather_folder_pending(client, folder, account_map, dry_run, ignore_latest_date_check, period))
+
+    events = _post_transfer_and_unmatched_events(client, all_rows, dry_run)
     summary = cast(TransferDetectionSummary, next(events))
     logging.info(f"Detekterade {summary.pairs_count} overforing(ar) mellan konton.")
 
@@ -1039,6 +667,15 @@ def main(
             print(str(exc))
             return 1
 
+    # BLOCK_TRANSACTION_POSTS is a test-safety guard read by
+    # create_transaction()/post_transfer(), which now live in
+    # firefly_bank_importer.service and resolve the name in that module's
+    # own globals. Setting it here to `dry_run` is a no-op in practice
+    # (both functions already short-circuit on their own `dry_run` check
+    # before this guard is ever consulted); this module's re-exported copy
+    # is kept in sync for introspection/test compatibility only -- the
+    # service module's own global is never mutated by production code,
+    # only by test fixtures via monkeypatch (see `service` import above).
     BLOCK_TRANSACTION_POSTS = dry_run
     start_time = time.monotonic()
 

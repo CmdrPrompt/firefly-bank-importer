@@ -58,7 +58,7 @@ import inspect
 import logging
 from datetime import date
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from firefly_python_api import FireflyClient
@@ -66,6 +66,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 import firefly_bank_importer.import_firefly as module
+import firefly_bank_importer.service as service_module
 
 SEB_HEADERS = ["Bokföringsdatum", "Valutadatum", "Verifikationsnummer", "Text", "Belopp", "Saldo"]
 
@@ -177,7 +178,7 @@ class TestTransactionResultContract:
 class TestNoPbarParameter:
     @pytest.mark.parametrize(
         "func_name",
-        ["_run_threaded_import", "_post_transfer", "_post_unmatched_rows"],
+        ["_run_threaded_import", "post_transfer", "_post_unmatched_rows"],
     )
     def test_function_no_longer_accepts_pbar(self, func_name: str) -> None:
         func = getattr(module, func_name)
@@ -220,14 +221,14 @@ class TestNoPbarParameter:
         write_seb_csv(folder_b / "2025-01.csv", [["2025-01-05", "2025-01-05", "V1", "Overforing", "100,00", "1100,00"]])
 
         client = make_client()
+        client.get_transactions_by_type.return_value = []
         account_map = {"Lonekonto": 1, "Sparkonto": 2}
 
-        with patch.object(module, "get_latest_transaction_date", return_value=None):
-            results = list(
-                module._run_multi_folder_import(
-                    client, [folder_a, folder_b], account_map, dry_run=True, ignore_latest_date_check=False
-                )
+        results = list(
+            module.run_multi_folder_import(
+                client, [folder_a, folder_b], account_map, dry_run=True, ignore_latest_date_check=False
             )
+        )
         assert len(results) > 0
 
 
@@ -244,7 +245,7 @@ class TestOpeningBalanceEventContract:
         write_seb_csv(csv_path, [["2025-01-05", "2025-01-05", "V1", "Old", "-10,00", "990,00"]])
         client = make_client(balance="0.00")
 
-        result = module._apply_auto_opening_balance(client, 42, [csv_path], dry_run=False)
+        result = module.apply_auto_opening_balance(client, 42, [csv_path], dry_run=False)
 
         assert isinstance(result, OpeningBalanceResult)
         assert result.account_id == 42
@@ -261,7 +262,7 @@ class TestOpeningBalanceEventContract:
         client = make_client(balance="0.00")
 
         with caplog.at_level(logging.INFO):
-            module._apply_auto_opening_balance(client, 42, [csv_path], dry_run=True)
+            module.apply_auto_opening_balance(client, 42, [csv_path], dry_run=True)
         assert caplog.records == []
 
 
@@ -287,7 +288,7 @@ class TestTransferResultContract:
         from firefly_bank_importer.service import TransactionStatus, TransferResult
 
         client = make_client()
-        result = module._post_transfer(
+        result = module.post_transfer(
             client, self._payload(), dry_run=False, source_name="Lonekonto", destination_name="Sparkonto"
         )
         assert isinstance(result, TransferResult)
@@ -302,7 +303,7 @@ class TestTransferResultContract:
     def test_post_transfer_emits_no_logging_calls(self, caplog: pytest.LogCaptureFixture) -> None:
         client = make_client()
         with caplog.at_level(logging.INFO):
-            module._post_transfer(
+            module.post_transfer(
                 client, self._payload(), dry_run=False, source_name="Lonekonto", destination_name="Sparkonto"
             )
         assert caplog.records == []
@@ -318,7 +319,7 @@ class TestBlockGuardEmitsStructuredErrorConsistently:
     def test_create_transaction_block_guard_returns_error_result(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from firefly_bank_importer.service import TransactionStatus
 
-        monkeypatch.setattr(module, "BLOCK_TRANSACTION_POSTS", True)
+        monkeypatch.setattr(service_module, "BLOCK_TRANSACTION_POSTS", True)
         client = make_client()
         result = module.create_transaction(client, "2025-01-05", "Shop", "-10,00", 42, account_name="SEB")
         assert result.status == TransactionStatus.ERROR
@@ -337,7 +338,7 @@ class TestBlockGuardEmitsStructuredErrorConsistently:
         """
         from firefly_bank_importer.service import TransactionStatus, TransferResult
 
-        monkeypatch.setattr(module, "BLOCK_TRANSACTION_POSTS", True)
+        monkeypatch.setattr(service_module, "BLOCK_TRANSACTION_POSTS", True)
         client = make_client()
         payload = {
             "type": "transfer",
@@ -349,7 +350,7 @@ class TestBlockGuardEmitsStructuredErrorConsistently:
             "currency_code": "SEK",
         }
 
-        result = module._post_transfer(client, payload, dry_run=False, source_name="A", destination_name="B")
+        result = module.post_transfer(client, payload, dry_run=False, source_name="A", destination_name="B")
 
         assert isinstance(result, TransferResult)
         assert result.status == TransactionStatus.ERROR
