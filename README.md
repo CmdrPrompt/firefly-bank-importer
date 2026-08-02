@@ -2,16 +2,13 @@
 
 I didn't quite like the built-in Firefly III import tool for several reasons, one of them being that it seemed very slow and probably very serial.
 
-So, here's another import tool for importing bank transactions into Firefly III. This one is a Python CLI tool and a (currently really ugly) web UI for importing bank transactions from CSV exports (currently SEB and ICA formats) into [Firefly III](https://www.firefly-iii.org/) via its REST API.
+So, here's another import tool for importing bank transactions into Firefly III. This one is a Python CLI tool (and importable service layer) for importing bank transactions from CSV exports (currently SEB, ICA, and Nordea formats) into [Firefly III](https://www.firefly-iii.org/) via its REST API.
 
 - Multi-threaded imports makes this faster than the original one
 - Discovers asset accounts from Firefly and caches them locally
 - Automatically prevents duplicate imports via latest-date filtering per account
 - Automatically splits multi-month CSV exports into monthly files
 - Dry-run mode, parallel posting, and timestamped log files
-- Web UI for folder selection, dry-run preview, live import, CSV upload, and import history
-
-Note: The CLI does everything it's built to do, while the web UI is still a work in progress.
 
 ## Installation
 
@@ -23,19 +20,9 @@ cd firefly-bank-importer
 uv sync
 ```
 
-On first CLI run, configure your Firefly III URL and API token interactively — or via the web UI settings page.
+On first CLI run, configure your Firefly III URL and API token interactively.
 
 ## Usage
-
-**Web UI** (recommended):
-
-```bash
-uv run firefly-web
-```
-
-Opens at `http://127.0.0.1:8000`. Use the UI to select folders, preview imports, upload CSV files, and view history.
-
-**CLI**:
 
 ```text
 uv run firefly-import <path> [--dry-run] [--ignore-latest-date-check] [--refresh-accounts]
@@ -56,6 +43,7 @@ On first run (or with `--refresh-accounts`), the tool discovers all Firefly asse
 |---|---|
 | SEB | `Bokföringsdatum`, `Text`, `Belopp` |
 | ICA | `Datum`, `Text`, `Typ`, `Belopp` |
+| Nordea | `Bokföringsdag`, `Belopp`, `Rubrik` |
 
 ## Development
 
