@@ -542,7 +542,7 @@ All HTTP communication with the Firefly III REST API (session management, creden
 headers, account and transaction API calls, connection validation) shall be delegated
 to the `firefly-python-api` library (bundled as a git subtree at
 `libs/firefly-python-api/`). No inline `requests.Session` construction or direct
-Firefly API calls shall exist in `import_firefly.py`, `web_ui.py`, or `config.py`.
+Firefly API calls shall exist in `import_firefly.py` or `config.py`.
 
 ### NFR-6 Startup efficiency
 When a valid cache exists, account resolution should not require network calls during normal imports.

@@ -46,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - The local FastAPI/Jinja2/HTMX web UI (`web_ui.py` and its test suite) has been removed from this repository, along with the `firefly-import-web` console script, the `fastapi`/`uvicorn`/`python-multipart`/`httpx` dependencies, and the `make web` target. The web frontend is being rebuilt as a standalone application in a separate repository, consuming this project's import logic as an importable service layer instead of a locally-hosted HTTP UI (TASK-064).
+- README and the NFR-13 HTTP session layer requirement no longer reference the removed `web_ui.py` module or `uv run firefly-web`; README now describes this repository as CLI-only, and its supported-CSV-formats table now lists Nordea alongside SEB and ICA (TASK-065).
 
 ### Added
 - Fixed `normalise_date` crash when importing already-split Nordea files: the method now falls back to ISO 8601 parsing if the bank-specific format does not match, making it idempotent for dates that were normalised during split (TASK-040).
