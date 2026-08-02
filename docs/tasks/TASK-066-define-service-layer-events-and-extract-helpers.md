@@ -1,7 +1,7 @@
 # TASK-066 Define service-layer event types and extract side-effect-free transfer helpers
 
 ## Status
-todo
+done
 
 ## Requirements
 **Binding:** FR-71, FR-72, FR-73
@@ -47,17 +47,17 @@ and it is verified by the existing test suite continuing to pass unchanged.
 **Make target:** `make branch-task f=TASK-066`
 
 ## Acceptance criteria (Gherkin)
-- [ ] Scenario: Service layer module imports without CLI dependencies
+- [x] Scenario: Service layer module imports without CLI dependencies
       Given a new service-layer module is created
       When external code imports it
       Then no import errors occur and no CLI-only dependencies (argparse, tqdm, sys.exit, direct stdout/print) are introduced into the importing context
 
-- [ ] Scenario: Transfer-matching helpers are extracted with identical behavior
+- [x] Scenario: Transfer-matching helpers are extracted with identical behavior
       Given transfer-matching functions are moved to the service-layer module
       When the existing test suite runs
       Then all tests pass unchanged, confirming behavior is identical
 
-- [ ] Scenario: Structured result types are defined and inspectable
+- [x] Scenario: Structured result types are defined and inspectable
       Given the service-layer module defines types for transaction result, folder result, and progress events
       When code constructs these objects with date, amount, account ID, status (OK/ERROR), and error message fields
       Then the objects can be inspected by callers to extract these values without requiring logging calls or side effects
@@ -72,3 +72,31 @@ and it is verified by the existing test suite continuing to pass unchanged.
 None
 
 ## Completion
+**Date:** 2026-08-02
+**Summary:** Created `src/firefly_bank_importer/service.py` with no dependency on `tqdm`,
+`argparse`, `sys.exit`, or print, verified by an AST-based test. Moved `PendingRow`,
+`parse_amount`, `MAX_TRANSFER_DATE_DIFF_DAYS`, and the seven transfer-matching helpers
+(`_match_transfer_pairs`, `_choose_candidate`, `_choose_among`, `_is_amount_and_date_match`,
+`_candidates_for_row`, `_resolve_row_choice`, `_description_overlap`) into the new module.
+`parse_amount` and `PendingRow` were included even though not named in the task's helper
+list, because the listed helpers depend on them directly — keeping them in
+`import_firefly.py` would have made the service module import CLI-adjacent code and
+defeated FR-71's "no dependency on CLI-only concerns" requirement. `import_firefly.py`
+now re-imports these names (with `__all__`) so all existing tests continue to pass
+unchanged. Defined `TransactionStatus` (OK/ERROR), `TransactionResult` (date, amount,
+account_id, status, error_message), `FolderResult`, and `ProgressEvent` as frozen
+dataclasses in the service module, per FR-71's structured-event requirement; these types
+are not wired into any orchestration logic yet — that is TASK-067. Added
+`tests/unit/test_service_layer.py` (10 tests) covering the no-CLI-dependency constraint,
+identical behavior of the moved helpers, and construction/inspection of the new structured
+types. `make test`: 416 passed (406 pre-existing + 10 new), coverage 95.27% (baseline
+95.15%). `make lint`: clean.
+**Files changed:**
+- `src/firefly_bank_importer/service.py` - created
+- `src/firefly_bank_importer/import_firefly.py` - modified (removed extracted definitions, re-imports from service)
+- `tests/unit/test_service_layer.py` - created
+- `CHANGELOG.md` - modified (new entry under `### Added`)
+- `docs/tasks/TASK-066-define-service-layer-events-and-extract-helpers.md` - modified (Status/Completion)
+**Branch:** `git checkout task/066-define-service-layer-events-and-extract-helpers`
+**Stage:** `src/firefly_bank_importer/service.py src/firefly_bank_importer/import_firefly.py tests/unit/test_service_layer.py CHANGELOG.md docs/tasks/TASK-066-define-service-layer-events-and-extract-helpers.md`
+**Commit:** `git commit -m "Define service-layer event types and extract transfer helpers"`
