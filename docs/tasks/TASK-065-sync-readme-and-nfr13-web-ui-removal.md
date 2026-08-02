@@ -1,7 +1,7 @@
 # TASK-065 Sync README and NFR-13 with web UI removal
 
 ## Status
-in-progress
+done
 
 ## Requirements
 **Binding:** NFR-13
@@ -77,4 +77,4 @@ None.
 - `docs/tasks/TASK-065-sync-readme-and-nfr13-web-ui-removal.md` - modified (Status/Completion)
 **Branch:** `git checkout task/065-sync-readme-and-nfr13-web-ui-removal`
 **Stage:** `README.md docs/REQUIREMENTS_import_firefly.md CHANGELOG.md docs/tasks/TASK-065-sync-readme-and-nfr13-web-ui-removal.md`
-**Commit:** `git commit -m "Sync README and NFR-13 with web UI removal"`
+**Commit:** `git commit -m "Mark TASK-065 as done"`
